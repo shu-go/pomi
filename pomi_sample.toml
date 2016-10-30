@@ -1,0 +1,9 @@
+[IMAP]
+# Gmailユーザー名
+User = "hogehoge@gmail.com"
+# Gmailパスワード（アプリパスワードを発行してください https://security.google.com/settings/security/apppasswords）
+Pass = "fugafuga"
+# 接続先（固定）
+Server = "imap.gmail.com:993"
+# メールボックス（ここも、ポメラSyncを使う限りでは固定です）
+Box = "Notes/pomera_sync"
