@@ -1,3 +1,11 @@
+[![Build Status](https://drone.io/bitbucket.org/shu/pomi/status.png)](https://drone.io/bitbucket.org/shu/pomi/latest)
+
+# ダウンロード
+
+pomi は、以下の場所からダウンロードできます。
+
+[https://drone.io/bitbucket.org/shu/pomi/files](https://drone.io/bitbucket.org/shu/pomi/files)
+
 # 使い方
 
 0. まず最初に、ポメラSyncのファイルを管理するディレクトリを決めます。
@@ -53,4 +61,5 @@ pomi では、デフォルトではカレントディレクトリの pomi.toml �
 * pomi を実行するためには 「pomi --config a/b/c/pomi.toml」のようにしないといけません。
   * 利便性のために、上記の内容を記述したシェルスクリプトを作っておくとよいでしょう。
 
+---
 >  vim: set et ft=markdown sts=4 sw=4 ts=4 tw=0 : 
