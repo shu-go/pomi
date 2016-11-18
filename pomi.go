@@ -117,31 +117,37 @@ func main() {
 				}
 
 				filenames := c.Args()
-				for _, fn := range filenames {
-					f, err := os.Open(fn)
+				for _, fp := range filenames {
+					matches, err := filepath.Glob(fp)
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "failed to open file %v: %v", fn, err)
 						continue
 					}
+					for _, fn := range matches {
+						f, err := os.Open(fn)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "failed to open file %v: %v", fn, err)
+							continue
+						}
 
-					_, subject := filepath.Split(fn)
-					extpos := strings.LastIndex(subject, ".")
-					if extpos != -1 {
-						subject = subject[:extpos]
+						_, subject := filepath.Split(fn)
+						extpos := strings.LastIndex(subject, ".")
+						if extpos != -1 {
+							subject = subject[:extpos]
+						}
+
+						var tm time.Time
+						info, err := f.Stat()
+						if err == nil {
+							tm = info.ModTime()
+						}
+
+						err = putMessage(config, ic, subject, f, tm)
+						if err != nil {
+							return err
+						}
+
+						f.Close()
 					}
-
-					var tm time.Time
-					info, err := f.Stat()
-					if err == nil {
-						tm = info.ModTime()
-					}
-
-					err = putMessage(config, ic, subject, f, tm)
-					if err != nil {
-						return err
-					}
-
-					f.Close()
 				}
 				return nil
 			},
