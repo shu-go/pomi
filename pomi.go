@@ -59,7 +59,8 @@ func main() {
 			Aliases: []string{"g"},
 			Usage:   "get messages from the box",
 			Flags: []cli.Flag{
-				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (ALL, comma separated or s1:s2"},
+				cli.BoolFlag{Name: "all", Usage: "fetch all messages"},
+				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
 				cli.StringFlag{Name: "output, out, o", Value: "stdout", Usage: "{stdout, subject}"},
 				cli.StringFlag{Name: "ext, e", Value: "txt", Usage: "file extention"},
@@ -77,10 +78,14 @@ func main() {
 				}
 
 				var seq, subject string
-				if subject = c.String("subject"); subject != "" {
-					seq = resolveSeqBySubject(ic, subject)
+				if c.Bool("all") {
+					seq = "1:9999999"
 				} else {
-					seq = c.String("seq")
+					if subject = c.String("subject"); subject != "" {
+						seq = resolveSeqBySubject(ic, subject)
+					} else {
+						seq = c.String("seq")
+					}
 				}
 
 				if seq == "" {
