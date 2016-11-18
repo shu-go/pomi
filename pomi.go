@@ -152,6 +152,54 @@ func main() {
 				return nil
 			},
 		},
+		{
+			Name:    "delete",
+			Aliases: []string{"del", "d"},
+			Usage:   "delete messages from the box",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
+				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
+			},
+			Action: func(c *cli.Context) error {
+				config, err := loadConfig(c)
+				if err != nil {
+					return err
+				}
+
+				ic, err := initIMAP(config)
+				if err != nil {
+					return err
+				}
+
+				var seq, subject string
+				if c.Bool("all") {
+					seq = "1:9999999"
+				} else {
+					if subject = c.String("subject"); subject != "" {
+						seq = resolveSeqBySubject(ic, subject)
+					} else {
+						seq = c.String("seq")
+					}
+				}
+
+				if seq == "" {
+					fmt.Println("no match")
+					return nil
+				}
+
+				err = ic.Store(seq, "+FLAGS", []string{imapclient.FlagDeleted})
+				if err != nil {
+					return err
+				}
+
+				err = ic.Expunge()
+				if err != nil {
+					return err
+				}
+
+				return nil
+			},
+		},
 	}
 	app.Name = "pomi"
 	app.Usage = "get or put contents in IMAP box"
