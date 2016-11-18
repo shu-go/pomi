@@ -62,7 +62,7 @@ func main() {
 				cli.BoolFlag{Name: "all", Usage: "fetch all messages"},
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
-				cli.StringFlag{Name: "output, out, o", Value: "stdout", Usage: "{stdout, subject}"},
+				cli.StringFlag{Name: "output, out, o", Value: "subject", Usage: "{stdout, subject}  default to subject"},
 				cli.StringFlag{Name: "ext, e", Value: "txt", Usage: "file extention"},
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
