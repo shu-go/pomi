@@ -392,14 +392,19 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output
 	}
 
 	for _, m := range mm {
+		orgM := m
 		m, err = imapclient.DecodeMailMessage(m)
 		if err != nil {
-			return err
+			hm, herr := imapclient.DecodeMailMessage(orgM, true)
+			if herr != nil {
+				return herr
+			}
+			return fmt.Errorf("on subject[%v]: %v", hm.Header.Get("Subject"), err)
 		}
 
 		file, err := getOutputWriteCloser(output, dir, m.Header.Get("Subject"), ext)
 		if err != nil {
-			return err
+			return fmt.Errorf("on subject[%v]: %v", m.Header.Get("Subject"), err)
 		}
 
 		if header {
@@ -414,7 +419,7 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output
 
 		body, err := ioutil.ReadAll(m.Body)
 		if err != nil {
-			return fmt.Errorf("body reading error: %v", err)
+			return fmt.Errorf("on subject[%v]: body reading error: %v", m.Header.Get("Subject"), err)
 		}
 		file.Write(body)
 
@@ -427,7 +432,7 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output
 			if err == nil {
 				err = os.Chtimes(name, tm, tm)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to change timestamp of %q: %v\n", name, err)
+					fmt.Fprintf(os.Stderr, "on subject[%v]: failed to change timestamp of %q: %v\n", m.Header.Get("Subject"), name, err)
 				}
 			}
 		}
