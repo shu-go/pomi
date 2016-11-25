@@ -55,6 +55,46 @@ func main() {
 			},
 		},
 		{
+			Name:    "show",
+			Aliases: []string{"g"},
+			Usage:   "show messages from the box",
+			Flags: []cli.Flag{
+				cli.BoolFlag{Name: "all", Usage: "show all messages"},
+				cli.StringFlag{Name: "seq", Usage: "show by seq. (comma separated or s1:s2"},
+				cli.StringFlag{Name: "subject, subj, s", Usage: "show by subject"},
+				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
+			},
+			Action: func(c *cli.Context) error {
+				config, err := loadConfig(c)
+				if err != nil {
+					return err
+				}
+
+				ic, err := initIMAP(config)
+				if err != nil {
+					return err
+				}
+
+				var seq, subject string
+				if c.Bool("all") {
+					seq = "1:9999999"
+				} else {
+					if subject = c.String("subject"); subject != "" {
+						seq = resolveSeqBySubject(ic, subject)
+					} else {
+						seq = c.String("seq")
+					}
+				}
+
+				if seq == "" {
+					fmt.Println("no match")
+					return nil
+				}
+
+				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), "stdout", "")
+			},
+		},
+		{
 			Name:    "get",
 			Aliases: []string{"g"},
 			Usage:   "get messages from the box",
@@ -62,7 +102,6 @@ func main() {
 				cli.BoolFlag{Name: "all", Usage: "fetch all messages"},
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
-				cli.StringFlag{Name: "output, out, o", Value: "subject", Usage: "{stdout, subject}  default to subject"},
 				cli.StringFlag{Name: "ext, e", Value: "txt", Usage: "file extention"},
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
@@ -93,9 +132,7 @@ func main() {
 					return nil
 				}
 
-				//fmt.Fprintf(os.Stdout, "%v\n", seq)
-				//return nil
-				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), c.String("output"), c.String("ext"))
+				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), "subject", c.String("ext"))
 			},
 		},
 		{
