@@ -95,7 +95,7 @@ func main() {
 
 				//fmt.Fprintf(os.Stdout, "%v\n", seq)
 				//return nil
-				return getMessagesBySeq(ic, seq, c.Bool("header"), c.String("output"), c.String("ext"))
+				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), c.String("output"), c.String("ext"))
 			},
 		},
 		{
@@ -118,7 +118,7 @@ func main() {
 
 				filenames := c.Args()
 				for _, fp := range filenames {
-					matches, err := filepath.Glob(fp)
+					matches, err := filepath.Glob(filepath.Join(c.GlobalString("dir"), fp))
 					if err != nil {
 						continue
 					}
@@ -205,6 +205,7 @@ func main() {
 	app.Usage = "get or put contents in IMAP box"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
+		cli.StringFlag{Name: "dir, d", Value: ".", Usage: "set local directory to `DIR`"},
 	}
 	app.Run(os.Args)
 	return
@@ -377,10 +378,17 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 	return nil
 }
 
-func getMessagesBySeq(c *imapclient.Client, seq string, header bool, output, ext string) error {
+func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output, ext string) error {
 	mm, err := c.Fetch(seq)
 	if err != nil {
 		return err
+	}
+
+	// arrange workdir
+	if dir != "." {
+		if err := os.MkdirAll(dir, os.ModeDir); err != nil {
+			return err
+		}
 	}
 
 	for _, m := range mm {
@@ -389,7 +397,7 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, output, ext
 			return err
 		}
 
-		file, err := getOutputWriteCloser(output, m.Header.Get("Subject"), ext)
+		file, err := getOutputWriteCloser(output, dir, m.Header.Get("Subject"), ext)
 		if err != nil {
 			return err
 		}
@@ -428,12 +436,12 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, output, ext
 	return nil
 }
 
-func getOutputWriteCloser(output, subject, ext string) (*os.File, error) {
+func getOutputWriteCloser(output, dir, subject, ext string) (*os.File, error) {
 	switch output {
 	case "stdout":
 		return os.Stdout, nil
 	case "subject":
-		file, err := os.Create(subject + "." + ext)
+		file, err := os.Create(filepath.Join(dir, subject+"."+ext))
 		if err != nil {
 			return nil, err
 		}
