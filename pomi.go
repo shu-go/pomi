@@ -415,7 +415,14 @@ func loadConfig(c *cli.Context) (*config, error) {
 	config := new(config)
 	_, err := toml.DecodeFile(c.GlobalString("config"), config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %v: %v\n", c.String("config"), err)
+		//return nil, fmt.Errorf("failed to open %v: %v\n", c.GlobalString("config"), err)
+		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", c.GlobalString("config"))
+		config.IMAP.Server = DEFAULT_IMAP_SERVER
+		config.IMAP.Box = DEFAULT_IMAP_BOX
+		if err = saveConfig(config, c); err != nil {
+			return nil, fmt.Errorf("failed to access to config: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "created.\n")
 	}
 
 	// use own client id?
