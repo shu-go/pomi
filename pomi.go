@@ -194,7 +194,7 @@ func main() {
 		{
 			Name:    "list",
 			Aliases: []string{"l", "ls"},
-			Usage:   "list messages in the box",
+			Usage:   "list messages",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
 			},
@@ -215,7 +215,7 @@ func main() {
 		{
 			Name:    "show",
 			Aliases: []string{"g"},
-			Usage:   "show messages from the box",
+			Usage:   "show messages",
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "all", Usage: "show all messages"},
 				cli.StringFlag{Name: "seq", Usage: "show by seq. (comma separated or s1:s2"},
@@ -255,7 +255,7 @@ func main() {
 		{
 			Name:    "get",
 			Aliases: []string{"g"},
-			Usage:   "get messages from the box",
+			Usage:   "get messages",
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "all", Usage: "fetch all messages"},
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
@@ -355,7 +355,7 @@ func main() {
 		{
 			Name:    "delete",
 			Aliases: []string{"del", "d"},
-			Usage:   "delete messages from the box",
+			Usage:   "delete messages",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
@@ -402,7 +402,8 @@ func main() {
 		},
 	}
 	app.Name = "pomi"
-	app.Usage = "get or put contents in IMAP box"
+	app.Usage = "Pomera Sync IMAP tool"
+	app.Version = "0.1.0"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
 		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},

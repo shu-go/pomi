@@ -1,65 +1,114 @@
+# pomi - Pomera Sync IMAP tool
+
+ポメラSyncされたメモを操作するツールです。
+
 [![Build Status](https://drone.io/bitbucket.org/shu/pomi/status.png)](https://drone.io/bitbucket.org/shu/pomi/latest)
 
 # ダウンロード
 
-pomi は、以下の場所からダウンロードできます。
+以下の場所からダウンロードできます。
 
 [https://drone.io/bitbucket.org/shu/pomi/files](https://drone.io/bitbucket.org/shu/pomi/files)
 
+# 使い始めの設定
+
+pomi はコマンドラインアプリケーションです。
+Windows ではコマンドプロンプトを使って操作をします。
+
+## 1. Gmail への接続設定
+
+コマンドプロンプトから pomi auth コマンドを実行して、Gmail に接続します。
+
+    > pomi auth
+
+初回実行時は「Windows セキュリティの重要な警告」が表示されますので、「アクセスを許可する」を押してください。
+
+また、コマンドを実行すると同時にブラウザーが起動し、「pomi が次の許可をリクエストしています:」と表示されますので、内容を確認の上、同意する場合に「許可」をおしてください。
+
+許可後のページは閉じていただいて結構です。（本当は自動的に閉じるようにしたいのですが、Chrome ではできません…）
+
+(pomi auth は、デフォルトでは60秒でタイムアウトします。60秒以上経った場合は、再度 pomi auth を実行してください)
+
+## 2. 接続確認
+
+コマンド pomi list を実行して、ポメラSyncの内容が見えることを確認してください。
+
+    > pomi list
+    (以下は表示例)
+    1 テスト (Fri, 18 Nov 2016 11:23:22 +0900)
+    2 ★メモ★ (Wed, 09 Nov 2016 18:16:46 +0900)
+
+表示例にある左端の番号（1, 2, …）は、ほかのコマンドでも使います。
+
+## 3. 動作確認2 メモの取得
+
+コマンド pomi get を使うと、条件を指定してメモをファイルとして取得できます。
+
+    > pomi get --all
+
+デフォルトの保存先は、「(カレントディレクトリ)/pomera_sync」 となっています。
+これは、--dir オプションで変更可能です。
+
+    > pomi --dir a/b/c get --all
+
+## 4. 動作確認3 メモの格納
+
+ローカルにあるファイルをポメラSyncに格納するためには、pomi put コマンドを使います。
+
+(ここでは、ローカルのファイル ★メモ★.txt を編集したものとします)
+
+    > pomi put ★メモ★.txt
+    searching files in ./pomera_sync
+    putting pomera_sync\★メモ★.txt
+
+ファイルの指定には、ワイルドカードとして * が使えます。
+
+    > pomi put ★*
+    searching files in ./pomera_sync
+    putting pomera_sync\★メモ★.txt
+
 # 使い方
 
-0. まず最初に、ポメラSyncのファイルを管理するディレクトリを決めます。
-   いくつかやり方はありますが、一番簡単なのは、このディレクトリに pomi の実行ファイルと pomi.toml を作る方法です。
-   以下の説明では、ポメラSyncのファイルを管理するディレクトリ＝pomiを配置したディレクトリとしています。
-   ※設定ファイルの位置を変更したい場合は、次のセクション「フォルダ構成の例」を参照してください。
-1. pomi_sample.toml を pomi.toml にリネームします。
-2. pomi.toml をテキストエディターで開き、USER, PASS の項目をご自身の Gmail 設定に合わせて変更します。
-3. 動作確認として、コマンドプロンプトやターミナルソフトを立ち上げ、「pomi list」を入力してください。
-   ポメラSyncの内容が一覧表示されればOKです。
-4. 詳細な使い方については、「pomi help」もしくは「pomi help コマンド」（コマンド＝list や get や put）を入力して説明文を参照してください。
+コマンドラインから、pomi help コマンドを実行して、何ができるか確認してみてください。
 
-# フォルダ構成の例
+※コマンドは今後増える可能性があります。
 
-## 最初に説明
+    > pomi help
+    NAME:
+      pomi - Pomera Sync IMAP tool
 
-pomi では、デフォルトではカレントディレクトリの pomi.toml を参照するようにしています。
-ですが、グローバルオプション --config で設定ファイルの場所を指定することができます。
+    USAGE:
+      pomi [global options] command [command options] [arguments...]
 
-    pomi --config 代替となる設定ファイルへのパス  コマンド
+    VERSION:
+      0.1.0
 
-デフォルトの設定ファイルは、pomi の実行ファイルがある場所ではなく、あくまでもカレントディレクトリです。
-そのため、pomi の実行ファイルそのものはパスの通ったどこかにおいておき、
+    COMMANDS:
+      auth            authenticate with gmail
+      list, l, ls     list messages
+      show, g         show messages
+      get, g          get messages
+      put, p          put messages
+      delete, del, d  delete messages
+      help, h         Shows a list of commands or help for one command
+    
+    GLOBAL OPTIONS:
+      --config CONFIG, --conf CONFIG  load the configuration from CONFIG (default: "./pomi.toml")
+      --dir DIR, -d DIR               set local directory to DIR (default: "./pomera_sync")
+      --help, -h                      show help
+      --version, -v                   print the version
 
-## 例1 「使い方」で説明したパスの構成
+また、各コマンドの詳細な使い方は、「pomi help コマンド名」を実行することで確認できます。
 
-    pomi.zip                ←DL してきた ZIP ファイル
-    pomi/                   ←ZIP ファイルを展開してできたフォルダ
-        pomi                ←実行ファイル
-        pomi_sample.toml
-        pomi.toml           ←pomi_sample.toml からリネーム
-        メモ１.txt          ←pomi を使って、ポメラSyncから取得したメモ
-        メモ２.txt
+    > pomi help list
+    NAME:
+      pomi list - list messages in the box
 
-* pomi/ 内で操作を行います。
-* 実行ファイルにパスを通す必要がありません。
-* pomi put を実行する際に、間違えて pomi 実行ファイルや pomi.toml を指定しないようにしてください。
+    USAGE:
+      pomi list [command options] [arguments...]
 
-## 例2 ポメラSync管理フォルダを設ける
-
-    pomi.zip
-    pomi/                   ←予め、ここにパスを通して置く
-        pomi
-        pomi_sample.toml
-    a/b/c/
-        pomi.toml
-        sync/               ←ここがカレントディレクトリ
-          メモ１.txt
-          メモ２.txt
-
-* ポメラSyncをする際に、pomi 関係のファイルが入り込む心配がなくなります。
-* pomi 実行ファイルを置いたフォルダには、パスを通しておきます。
-* pomi を実行するためには 「pomi --config a/b/c/pomi.toml」のようにしないといけません。
-  * 利便性のために、上記の内容を記述したシェルスクリプトを作っておくとよいでしょう。
+    OPTIONS:
+      --criteria value, -c value  criteria (default: "SUBJECT")
 
 ---
->  vim: set et ft=markdown sts=4 sw=4 ts=4 tw=0 : 
+>  vim: set et ft=markdown sts=4 sw=4 ts=4 tw=0 :
