@@ -312,19 +312,24 @@ func main() {
 				}
 
 				filenames := c.Args()
+				fmt.Fprintf(os.Stderr, "searching files in %v\n", c.GlobalString("dir"))
 				for _, fp := range filenames {
 					matches, err := filepath.Glob(filepath.Join(c.GlobalString("dir"), fp))
 					if err != nil {
 						continue
 					}
+					if len(matches) == 0 {
+						fmt.Fprintf(os.Stderr, "no matches\n")
+					}
 					for _, fn := range matches {
 						f, err := os.Open(fn)
 						if err != nil {
-							fmt.Fprintf(os.Stderr, "failed to open file %v: %v", fn, err)
+							fmt.Fprintf(os.Stderr, "failed to open file %v: %v\n", fn, err)
 							continue
 						}
+						fmt.Fprintf(os.Stderr, "putting %v\n", fn)
 
-						_, subject := filepath.Split(fn)
+						_, subject := filepath.Split(filepath.Base(fn))
 						extpos := strings.LastIndex(subject, ".")
 						if extpos != -1 {
 							subject = subject[:extpos]
