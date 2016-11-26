@@ -1,9 +1,22 @@
 [IMAP]
 # Gmailユーザー名
+# pomi auth を実行して成功すると、自動的に記入されます。
 User = "hogehoge@gmail.com"
 # Gmailパスワード（アプリパスワードを発行してください https://security.google.com/settings/security/apppasswords）
+# pomi auth を実行して成功している場合、Pass の記入は不要です。
+# User & Pass で認証する場合は、アプリパスワードを発行して転記してください https://security.google.com/settings/security/apppasswords
 Pass = "fugafuga"
 # 接続先（固定）
 Server = "imap.gmail.com:993"
 # メールボックス（ここも、ポメラSyncを使う限りでは固定です）
 Box = "Notes/pomera_sync"
+
+[AUTH]
+# ClientID と ClientSecret は、通常利用の際は空白にします。
+# 独自に OAuth 2.0 クライアント ID を取得する場合、以下のURLにアクセスして、ClientID と ClientSecret を転記します。
+#     https://console.developers.google.com/apis/credentials
+ClientID = ""
+ClientSecret = ""
+# 認証済みのしるし
+# pomi auth を実行して成功すると、自動的に記入されます。
+RefreshToken = ""
