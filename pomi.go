@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"net/mail"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,6 +19,7 @@ import (
 
 	"bitbucket.org/shu/imapclient"
 	"github.com/BurntSushi/toml"
+	"github.com/pkg/browser"
 	"github.com/urfave/cli"
 )
 
@@ -28,11 +34,154 @@ type config struct {
 		Server string
 		Box    string
 	}
+	AUTH struct {
+		ClientID     string `toml:"ClientID,omitempty"`
+		ClientSecret string `toml:"ClientSecret,omitempty"`
+
+		RefreshToken string `toml:"RefreshToken,omitempty"`
+	}
 }
+
+type OAuth2AuthedTokens struct {
+	RefreshToken string `json:"refresh_token"`
+	AccessToken  string `json:"access_token"`
+}
+type OAuth2Email struct {
+	Data struct {
+		Email      string `json:"email"`
+		IsVerified bool   `json:"isVerified"`
+	} `json:"data"`
+}
+
+var (
+	apiClientID     string
+	apiClientSecret string
+)
 
 func main() {
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
+		{
+			Name:  "auth",
+			Usage: "authenticate with gmail",
+			Flags: []cli.Flag{
+				cli.IntFlag{Name: "port", Value: 7878, Usage: "a temporal `PORT` for OAuth authentication. 0 is for copy&paste to CLI."},
+				cli.IntFlag{Name: "timeout", Value: 60, Usage: "set `TIMEOUT` (in seconds) on authentication transaction. < 0 is infinite."},
+			},
+			Action: func(c *cli.Context) error {
+				config, err := loadConfig(c)
+				if err != nil {
+					return err
+				}
+
+				timeout := time.Duration(c.Int("timeout"))
+				if timeout > 0 {
+					go func() {
+						select {
+						case <-time.After(timeout * time.Second):
+							fmt.Fprintf(os.Stderr, "timed out\n")
+							os.Exit(1)
+						}
+					}()
+				}
+
+				// setup parameters
+
+				redirectURI := "urn:ietf:wg:oauth:2.0:oob"
+				port := c.Int("port")
+				var codeChan chan string
+				if port != 0 {
+					redirectURI = fmt.Sprintf("http://localhost:%d/", port)
+					codeChan = make(chan string)
+					go launchRedirectionServer(port, codeChan)
+				}
+
+				// request authorization (and authentication)
+
+				permURL := "https://accounts.google.com/o/oauth2/auth?"
+				form := url.Values{}
+				form.Add("client_id", apiClientID)
+				form.Add("redirect_uri", redirectURI)
+				form.Add("scope", "https://mail.google.com/ email")
+				form.Add("response_type", "code")
+				browser.OpenURL(permURL + form.Encode())
+
+				var authorization_code string
+				if port == 0 {
+					fmt.Scanln(&authorization_code)
+				} else {
+					authorization_code = <-codeChan
+				}
+				//log.Printf("authorization_code=%s\n", authorization_code)
+
+				// request access token & request token
+
+				authURL := "https://accounts.google.com/o/oauth2/token"
+				form = url.Values{}
+				form.Add("client_id", apiClientID)
+				form.Add("client_secret", apiClientSecret)
+				form.Add("code", authorization_code)
+				form.Add("redirect_uri", redirectURI)
+				form.Add("grant_type", "authorization_code")
+				resp, err := http.PostForm(authURL, form)
+				if err != nil {
+					return err
+				}
+				defer resp.Body.Close()
+				/*
+					{
+						log.Printf("%s&%s", authURL, form.Encode())
+						b, _ := ioutil.ReadAll(resp.Body)
+						log.Printf("resp.Body=%s", b)
+					}
+				*/
+				dec := json.NewDecoder(resp.Body)
+				t := OAuth2AuthedTokens{}
+				err = dec.Decode(&t)
+				if err == io.EOF {
+					return fmt.Errorf("auth response from the server is empty")
+				} else if err != nil {
+					return err
+				}
+				config.AUTH.RefreshToken = t.RefreshToken
+
+				// get email address
+
+				infoURL := "https://www.googleapis.com/userinfo/email"
+				form = url.Values{}
+				form.Add("access_token", t.AccessToken)
+				form.Add("alt", "json")
+				//inforesp, err := http.PostForm(infoURL, form)
+				inforesp, err := http.Get(fmt.Sprintf("%s?%s", infoURL, form.Encode()))
+				if err != nil {
+					// save with User unchanged.
+					saveConfig(config, c)
+					return fmt.Errorf("failed to get email address: %v", err)
+				}
+				defer inforesp.Body.Close()
+				/*
+					 {
+						log.Printf("%s&%s", infoURL, form.Encode())
+						b, _ := ioutil.ReadAll(inforesp.Body)
+						log.Printf("inforesp.Body=%s", b)
+					}
+				*/
+
+				dec = json.NewDecoder(inforesp.Body)
+				e := OAuth2Email{}
+				err = dec.Decode(&e)
+				if err == io.EOF {
+					return fmt.Errorf("auth response from the server is empty")
+				} else if err != nil {
+					return err
+				}
+				config.IMAP.User = e.Data.Email
+
+				saveConfig(config, c)
+
+				return nil
+			},
+		},
 		{
 			Name:    "list",
 			Aliases: []string{"l", "ls"},
@@ -254,30 +403,86 @@ func loadConfig(c *cli.Context) (*config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %v: %v\n", c.String("config"), err)
 	}
+
+	// use own client id?
+	if config.AUTH.ClientID != "" {
+		apiClientID = config.AUTH.ClientID
+		apiClientSecret = config.AUTH.ClientSecret
+	}
+
 	return config, nil
 }
 
+func saveConfig(config *config, c *cli.Context) error {
+	buf := new(bytes.Buffer)
+	if err := toml.NewEncoder(buf).Encode(config); err != nil {
+		return err
+	}
+	return ioutil.WriteFile(c.GlobalString("config"), buf.Bytes(), 0700)
+}
+
 func initIMAP(config *config) (*imapclient.Client, error) {
-	if config.IMAP.User == "" {
-		config.IMAP.User = os.Getenv("IMAP_USER")
-	}
-	if config.IMAP.Pass == "" {
-		config.IMAP.Pass = os.Getenv("IMAP_PASS")
+	c, err := connIMAP(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %v: %v\n", config.IMAP.Server, err)
 	}
 
-	c, err := imapclient.NewClient("tcp", config.IMAP.Server)
+	err = loginIMAP(c, config)
 	if err != nil {
-		return nil, fmt.Errorf("can't connect to %v: %v\n", config.IMAP.Server, err)
-	}
-
-	err = c.Login(config.IMAP.User, config.IMAP.Pass)
-	if err != nil {
-		return nil, fmt.Errorf("can't login as %v: %v\n", config.IMAP.User, err)
+		return nil, fmt.Errorf("failed to log in to %v: %v\n", config.IMAP.Server, err)
 	}
 
 	err = c.Select(config.IMAP.Box)
 	if err != nil {
 		return nil, fmt.Errorf("can't select box %v: %v\n", config.IMAP.Box, err)
+	}
+
+	return c, nil
+}
+
+func loginIMAP(c *imapclient.Client, config *config) error {
+	loggedin := false
+
+	if config.AUTH.RefreshToken != "" {
+		access_token, err := refreshAccessToken(config)
+		if err == nil {
+			data := fmt.Sprintf("user=%s\001auth=Bearer %s\001\001", config.IMAP.User, access_token)
+			am := base64.StdEncoding.EncodeToString([]byte(data))
+
+			err = c.Authenticate(fmt.Sprintf("XOAUTH2 %s", am))
+
+			loggedin = true
+		}
+
+		if err != nil {
+			loggedin = false
+			fmt.Fprintf(os.Stderr, "failed to refresh access token: %v", err)
+			fmt.Fprintf(os.Stderr, "try to login with [IMAP] User and Pass")
+		}
+	}
+
+	if !loggedin {
+		fmt.Fprintf(os.Stderr, "login with user&pass\n")
+		if config.IMAP.User == "" {
+			config.IMAP.User = os.Getenv("IMAP_USER")
+		}
+		if config.IMAP.Pass == "" {
+			config.IMAP.Pass = os.Getenv("IMAP_PASS")
+		}
+
+		err := c.Login(config.IMAP.User, config.IMAP.Pass)
+		if err != nil {
+			return fmt.Errorf("can't login as %v: %v\n", config.IMAP.User, err)
+		}
+	}
+
+	return nil
+}
+
+func connIMAP(config *config) (*imapclient.Client, error) {
+	c, err := imapclient.NewClient("tcp", config.IMAP.Server)
+	if err != nil {
+		return nil, fmt.Errorf("can't connect to %v: %v\n", config.IMAP.Server, err)
 	}
 
 	return c, nil
@@ -504,6 +709,66 @@ func resolveSeqBySubject(c *imapclient.Client, subject string) string {
 		seqstrs[i] = fmt.Sprintf("%v", s)
 	}
 	return strings.Join(seqstrs, ",")
+}
+
+func refreshAccessToken(config *config) (string, error) {
+	authURL := "https://accounts.google.com/o/oauth2/token"
+	form := url.Values{}
+	form.Add("client_id", apiClientID)
+	form.Add("client_secret", apiClientSecret)
+	form.Add("refresh_token", config.AUTH.RefreshToken)
+	form.Add("grant_type", "refresh_token")
+	resp, err := http.PostForm(authURL, form)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+	t := OAuth2AuthedTokens{}
+	err = dec.Decode(&t)
+	if err == io.EOF {
+		return "", fmt.Errorf("auth response from the server is empty")
+	} else if err != nil {
+		return "", err
+	}
+
+	return t.AccessToken, nil
+}
+
+func launchRedirectionServer(port int, codeChan chan string) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		code := r.FormValue("code")
+		codeChan <- code
+
+		var color string
+		var icon string
+		var result string
+		if code != "" {
+			//success
+			color = "green"
+			icon = "&#10003;"
+			result = "Successfully authenticated!!"
+		} else {
+			//fail
+			color = "red"
+			icon = "&#10008;"
+			result = "FAILED!"
+		}
+		disp := fmt.Sprintf(`<div><span style="font-size:xx-large; color:%s; border:solid thin %s;">%s</span> %s</div>`, color, color, icon, result)
+
+		fmt.Fprintf(w, `
+<html>
+	<head><title>%s pomi</title></head>
+	<body onload="open(location, '_self').close();"> <!-- Chrome won't let me close! -->
+		%s
+		<hr />
+		<p>This is a temporal page.<br />Please close it.</p>
+	</body>
+</html>
+`, icon, disp)
+	})
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
 type uint32slice []uint32
