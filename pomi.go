@@ -58,6 +58,15 @@ var (
 	apiClientSecret string
 )
 
+const (
+	DEFAULT_IMAP_SERVER = "imap.gmail.com:993"
+	DEFAULT_IMAP_BOX    = "Notes/pomera_sync"
+
+	OAUTH2_AUTH_BASE_URL  = "https://accounts.google.com/o/oauth2/auth"
+	OAUTH2_TOKEN_BASE_URL = "https://accounts.google.com/o/oauth2/token"
+	OAUTH2_SCOPE          = "https://mail.google.com/ email"
+)
+
 func main() {
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
@@ -98,13 +107,13 @@ func main() {
 
 				// request authorization (and authentication)
 
-				permURL := "https://accounts.google.com/o/oauth2/auth?"
+				authURL := OAUTH2_AUTH_BASE_URL
 				form := url.Values{}
 				form.Add("client_id", apiClientID)
 				form.Add("redirect_uri", redirectURI)
-				form.Add("scope", "https://mail.google.com/ email")
+				form.Add("scope", OAUTH2_SCOPE)
 				form.Add("response_type", "code")
-				browser.OpenURL(permURL + form.Encode())
+				browser.OpenURL(fmt.Sprintf("%s?%s", authURL, form.Encode()))
 
 				var authorization_code string
 				if port == 0 {
@@ -116,21 +125,21 @@ func main() {
 
 				// request access token & request token
 
-				authURL := "https://accounts.google.com/o/oauth2/token"
+				tokenURL := OAUTH2_TOKEN_BASE_URL
 				form = url.Values{}
 				form.Add("client_id", apiClientID)
 				form.Add("client_secret", apiClientSecret)
 				form.Add("code", authorization_code)
 				form.Add("redirect_uri", redirectURI)
 				form.Add("grant_type", "authorization_code")
-				resp, err := http.PostForm(authURL, form)
+				resp, err := http.PostForm(tokenURL, form)
 				if err != nil {
 					return err
 				}
 				defer resp.Body.Close()
 				/*
 					{
-						log.Printf("%s&%s", authURL, form.Encode())
+						log.Printf("%s&%s", tokenURL, form.Encode())
 						b, _ := ioutil.ReadAll(resp.Body)
 						log.Printf("resp.Body=%s", b)
 					}
@@ -712,13 +721,13 @@ func resolveSeqBySubject(c *imapclient.Client, subject string) string {
 }
 
 func refreshAccessToken(config *config) (string, error) {
-	authURL := "https://accounts.google.com/o/oauth2/token"
+	tokenURL := OAUTH2_TOKEN_BASE_URL
 	form := url.Values{}
 	form.Add("client_id", apiClientID)
 	form.Add("client_secret", apiClientSecret)
 	form.Add("refresh_token", config.AUTH.RefreshToken)
 	form.Add("grant_type", "refresh_token")
-	resp, err := http.PostForm(authURL, form)
+	resp, err := http.PostForm(tokenURL, form)
 	if err != nil {
 		return "", err
 	}
