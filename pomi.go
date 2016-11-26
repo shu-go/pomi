@@ -391,7 +391,7 @@ func main() {
 	app.Usage = "get or put contents in IMAP box"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
-		cli.StringFlag{Name: "dir, d", Value: ".", Usage: "set local directory to `DIR`"},
+		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
 	}
 	app.Run(os.Args)
 	return
