@@ -25,8 +25,6 @@ import (
 
 var _ = log.Print
 
-var utf8BOM = []byte{0xef, 0xbb, 0xbf}
-
 type config struct {
 	IMAP struct {
 		User   string
@@ -562,11 +560,15 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 			buff.Write(all)
 		}
 
-		if bytes.Index(buff.Bytes(), utf8BOM) == -1 {
-			bombuff := bytes.NewBuffer(utf8BOM)
-			bombuff.Write(buff.Bytes())
+		rawBytes := buff.Bytes()
+		encName := Chardet(rawBytes)
+		if encName == UTF8N {
+			bombuff := bytes.NewBuffer(UTF8BOM)
+			bombuff.Write(rawBytes)
 			buff = bombuff
 		}
+		log.Printf("charset=%v\n", encName)
+		m.Header["Content-Type"] = []string{fmt.Sprintf("text/plain; charset=\"%s\"", encName)}
 
 		m.Body = buff
 	}
