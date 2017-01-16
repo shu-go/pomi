@@ -2,13 +2,11 @@
 
 ポメラSyncされたメモを操作するツールです。
 
-[![Build Status](https://drone.io/bitbucket.org/shu/pomi/status.png)](https://drone.io/bitbucket.org/shu/pomi/latest)
-
 # ダウンロード
 
 以下の場所からダウンロードできます。
 
-[https://drone.io/bitbucket.org/shu/pomi/files](https://drone.io/bitbucket.org/shu/pomi/files)
+[http://goo.gl/T8BFzD](http://goo.gl/T8BFzD)
 
 # 使い始めの設定
 
