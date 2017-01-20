@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"bitbucket.org/shu/imapclient"
+	"bitbucket.org/shu/log"
 	"github.com/BurntSushi/toml"
 	"github.com/pkg/browser"
 	"github.com/urfave/cli"
@@ -199,6 +199,7 @@ func main() {
 				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
 			},
 			Action: func(c *cli.Context) error {
+				log.Debug("list")
 				config, err := loadConfig(c)
 				if err != nil {
 					return err
@@ -531,10 +532,12 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 			return fmt.Errorf("message(%q) read: %v", subject, err)
 		}
 
-		m, err = imapclient.DecodeMailMessage(m)
+		mm, err := imapclient.DecodeMailMessage(m)
 		if err != nil {
 			return fmt.Errorf("message(%q) decode error: %v", subject, err)
 		}
+		m = pickupTextPartMessage(mm)
+
 	} else {
 		m = new(mail.Message)
 		m.Header = make(mail.Header)
@@ -630,13 +633,16 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 
 	for _, seq := range seqs {
 		m := msgs[seq]
-		dm, err := imapclient.DecodeMailMessage(m, true)
+		mm, err := imapclient.DecodeMailMessage(m, true)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to decode %dth message: %v\n", seq, err)
-			fmt.Fprintf(os.Stderr, "headers:%#v", m.Header)
+			if len(mm) != 0 {
+				fmt.Fprintf(os.Stderr, "headers:%#v", mm[0].Header)
+			}
 			os.Exit(1)
 		}
-		fmt.Printf("%d %v (%v)\n", seq, dm.Header.Get("Subject"), dm.Header.Get("Date"))
+		m = pickupTextPartMessage(mm)
+		fmt.Printf("%d %v (%v)\n", seq, m.Header.Get("Subject"), m.Header.Get("Date"))
 	}
 
 	return nil
@@ -657,14 +663,16 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output
 
 	for _, m := range mm {
 		orgM := m
-		m, err = imapclient.DecodeMailMessage(m)
+		mm, err := imapclient.DecodeMailMessage(m)
 		if err != nil {
-			hm, herr := imapclient.DecodeMailMessage(orgM, true)
+			hmm, herr := imapclient.DecodeMailMessage(orgM, true)
 			if herr != nil {
 				return herr
 			}
+			hm := pickupTextPartMessage(hmm)
 			return fmt.Errorf("on subject[%v]: %v", hm.Header.Get("Subject"), err)
 		}
+		m = pickupTextPartMessage(mm)
 
 		file, err := getOutputWriteCloser(output, dir, m.Header.Get("Subject"), ext)
 		if err != nil {
@@ -811,4 +819,21 @@ func joinUint32(vv []uint32, sep string) string {
 		ss[i] = fmt.Sprintf("%v", v)
 	}
 	return strings.Join(ss, sep)
+}
+
+func pickupTextPartMessage(msgs []*mail.Message) *mail.Message {
+	if msgs == nil || len(msgs) == 0 {
+		return nil
+	}
+
+	if len(msgs) == 1 {
+		return msgs[0]
+	}
+
+	for _, m := range msgs {
+		if strings.Contains(m.Header.Get("Content-Type"), "text") {
+			return m
+		}
+	}
+	return msgs[len(msgs)-1]
 }
