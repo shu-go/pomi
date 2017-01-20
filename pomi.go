@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"bitbucket.org/shu/imapclient"
@@ -199,7 +200,7 @@ func main() {
 				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
 			},
 			Action: func(c *cli.Context) error {
-				log.Debug("list")
+				//log.Debug("list")
 				config, err := loadConfig(c)
 				if err != nil {
 					return err
@@ -311,6 +312,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				ic.Logout()
 
 				filenames := c.Args()
 				fmt.Fprintf(os.Stderr, "searching files in %v\n", c.GlobalString("dir"))
@@ -322,33 +324,59 @@ func main() {
 					if len(matches) == 0 {
 						fmt.Fprintf(os.Stderr, "no matches\n")
 					}
+
+					var mu sync.Mutex
+					errs := []error{}
+					var wg sync.WaitGroup
+
 					for _, fn := range matches {
-						f, err := os.Open(fn)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "failed to open file %v: %v\n", fn, err)
-							continue
-						}
-						fmt.Fprintf(os.Stderr, "putting %v\n", fn)
+						wg.Add(1)
 
-						_, subject := filepath.Split(filepath.Base(fn))
-						extpos := strings.LastIndex(subject, ".")
-						if extpos != -1 {
-							subject = subject[:extpos]
-						}
+						go func(fn string) {
+							//log.Debug(fn)
 
-						var tm time.Time
-						info, err := f.Stat()
-						if err == nil {
-							tm = info.ModTime()
-						}
+							f, err := os.Open(fn)
+							if err != nil {
+								mu.Lock()
+								fmt.Fprintf(os.Stderr, "failed to open file %v: %v\n", fn, err)
+								mu.Unlock()
+								return
+							}
 
-						err = putMessage(config, ic, subject, f, tm)
-						if err != nil {
-							return err
-						}
+							mu.Lock()
+							fmt.Fprintf(os.Stderr, "putting %v\n", fn)
+							mu.Unlock()
 
-						f.Close()
+							_, subject := filepath.Split(filepath.Base(fn))
+							extpos := strings.LastIndex(subject, ".")
+							if extpos != -1 {
+								subject = subject[:extpos]
+							}
+
+							var tm time.Time
+							info, err := f.Stat()
+							if err == nil {
+								tm = info.ModTime()
+							}
+
+							//log.Debug("putMessage", fn)
+							iic, _ := initIMAP(config)
+							err = putMessage(config, iic, subject, f, tm)
+							//log.Debug("end putMessage", fn)
+							if err != nil {
+								mu.Lock()
+								errs = append(errs, err)
+								mu.Unlock()
+								return
+							}
+
+							iic.Logout()
+							f.Close()
+
+							wg.Done()
+						}(fn)
 					}
+					wg.Wait()
 				}
 				return nil
 			},
