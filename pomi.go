@@ -60,12 +60,12 @@ var (
 )
 
 const (
-	DEFAULT_IMAP_SERVER = "imap.gmail.com:993"
-	DEFAULT_IMAP_BOX    = "Notes/pomera_sync"
+	defaultIMAPServer = "imap.gmail.com:993"
+	defaultIMAPBox    = "Notes/pomera_sync"
 
-	OAUTH2_AUTH_BASE_URL  = "https://accounts.google.com/o/oauth2/auth"
-	OAUTH2_TOKEN_BASE_URL = "https://accounts.google.com/o/oauth2/token"
-	OAUTH2_SCOPE          = "https://mail.google.com/ email"
+	oauth2AuhBaseURL   = "https://accounts.google.com/o/oauth2/auth"
+	oauth2TokenBaseURL = "https://accounts.google.com/o/oauth2/token"
+	oauth2Scope        = "https://mail.google.com/ email"
 )
 
 func main() {
@@ -108,29 +108,29 @@ func main() {
 
 				// request authorization (and authentication)
 
-				authURL := OAUTH2_AUTH_BASE_URL
+				authURL := oauth2AuhBaseURL
 				form := url.Values{}
 				form.Add("client_id", apiClientID)
 				form.Add("redirect_uri", redirectURI)
-				form.Add("scope", OAUTH2_SCOPE)
+				form.Add("scope", oauth2Scope)
 				form.Add("response_type", "code")
 				browser.OpenURL(fmt.Sprintf("%s?%s", authURL, form.Encode()))
 
-				var authorization_code string
+				var authorizationCode string
 				if port == 0 {
-					fmt.Scanln(&authorization_code)
+					fmt.Scanln(&authorizationCode)
 				} else {
-					authorization_code = <-codeChan
+					authorizationCode = <-codeChan
 				}
 				//log.Printf("authorization_code=%s\n", authorization_code)
 
 				// request access token & request token
 
-				tokenURL := OAUTH2_TOKEN_BASE_URL
+				tokenURL := oauth2TokenBaseURL
 				form = url.Values{}
 				form.Add("client_id", apiClientID)
 				form.Add("client_secret", apiClientSecret)
-				form.Add("code", authorization_code)
+				form.Add("code", authorizationCode)
 				form.Add("redirect_uri", redirectURI)
 				form.Add("grant_type", "authorization_code")
 				resp, err := http.PostForm(tokenURL, form)
@@ -447,8 +447,8 @@ func loadConfig(c *cli.Context) (*config, error) {
 	if err != nil {
 		//return nil, fmt.Errorf("failed to open %v: %v\n", c.GlobalString("config"), err)
 		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", c.GlobalString("config"))
-		config.IMAP.Server = DEFAULT_IMAP_SERVER
-		config.IMAP.Box = DEFAULT_IMAP_BOX
+		config.IMAP.Server = defaultIMAPServer
+		config.IMAP.Box = defaultIMAPBox
 		if err = saveConfig(config, c); err != nil {
 			return nil, fmt.Errorf("failed to access to config: %v", err)
 		}
@@ -495,9 +495,9 @@ func loginIMAP(c *imapclient.Client, config *config) error {
 	loggedin := false
 
 	if config.AUTH.RefreshToken != "" {
-		access_token, err := refreshAccessToken(config)
+		accessToken, err := refreshAccessToken(config)
 		if err == nil {
-			data := fmt.Sprintf("user=%s\001auth=Bearer %s\001\001", config.IMAP.User, access_token)
+			data := fmt.Sprintf("user=%s\001auth=Bearer %s\001\001", config.IMAP.User, accessToken)
 			am := base64.StdEncoding.EncodeToString([]byte(data))
 
 			err = c.Authenticate(fmt.Sprintf("XOAUTH2 %s", am))
@@ -770,7 +770,7 @@ func resolveSeqBySubject(c *imapclient.Client, subject string) string {
 }
 
 func refreshAccessToken(config *config) (string, error) {
-	tokenURL := OAUTH2_TOKEN_BASE_URL
+	tokenURL := oauth2TokenBaseURL
 	form := url.Values{}
 	form.Add("client_id", apiClientID)
 	form.Add("client_secret", apiClientSecret)
