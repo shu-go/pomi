@@ -854,18 +854,6 @@ func launchRedirectionServer(port int, codeChan chan string) {
 	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
-type uint32slice []uint32
-
-func (us uint32slice) Len() int {
-	return len(us)
-}
-func (us uint32slice) Less(i, j int) bool {
-	return us[i] < us[j]
-}
-func (us uint32slice) Swap(i, j int) {
-	us[i], us[j] = us[j], us[i]
-}
-
 func joinUint32(vv []uint32, sep string) string {
 	ss := make([]string, len(vv))
 	for i, v := range vv {
