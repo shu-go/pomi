@@ -42,11 +42,11 @@ type config struct {
 	}
 }
 
-type OAuth2AuthedTokens struct {
+type oAuth2AuthedTokens struct {
 	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
 }
-type OAuth2Email struct {
+type oAuth2Email struct {
 	Data struct {
 		Email      string `json:"email"`
 		IsVerified bool   `json:"isVerified"`
@@ -145,7 +145,7 @@ func main() {
 					}
 				*/
 				dec := json.NewDecoder(resp.Body)
-				t := OAuth2AuthedTokens{}
+				t := oAuth2AuthedTokens{}
 				err = dec.Decode(&t)
 				if err == io.EOF {
 					return fmt.Errorf("auth response from the server is empty")
@@ -177,7 +177,7 @@ func main() {
 				*/
 
 				dec = json.NewDecoder(inforesp.Body)
-				e := OAuth2Email{}
+				e := oAuth2Email{}
 				err = dec.Decode(&e)
 				if err == io.EOF {
 					return fmt.Errorf("auth response from the server is empty")
@@ -797,7 +797,7 @@ func refreshAccessToken(config *config) (string, error) {
 	defer resp.Body.Close()
 
 	dec := json.NewDecoder(resp.Body)
-	t := OAuth2AuthedTokens{}
+	t := oAuth2AuthedTokens{}
 	err = dec.Decode(&t)
 	if err == io.EOF {
 		return "", fmt.Errorf("auth response from the server is empty")
