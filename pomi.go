@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -652,7 +653,17 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		os.Exit(1)
 	}
 
-	for seq, msg := range msgs {
+	// convert random []seq in map[seq]msg to sorted []seqs
+	seqs := make([]uint32, 0, len(msgs))
+	for seq, _ := range msgs {
+		seqs = append(seqs, seq)
+	}
+	sort.Slice(seqs, func(i, j int) bool {
+		return seqs[i] < seqs[j]
+	})
+
+	for _, seq := range seqs {
+		msg := msgs[seq]
 		textMsg, err := decodeMessageAsTextMessage(msg, true)
 		if err != nil {
 			return err
