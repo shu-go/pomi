@@ -54,6 +54,11 @@ type OAuth2Email struct {
 	} `json:"data"`
 }
 
+type snapshot struct {
+	name      string
+	timestamp time.Time
+}
+
 var (
 	apiClientID     string
 	apiClientSecret string
@@ -424,6 +429,123 @@ func main() {
 				err = ic.Expunge()
 				if err != nil {
 					return err
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:    "watch",
+			Aliases: []string{"w"},
+			Usage:   "watch IMAP server and get messages",
+			Flags: []cli.Flag{
+				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
+				cli.StringFlag{Name: "ext, e", Value: "txt", Usage: "file extention"},
+				cli.BoolFlag{Name: "sync", Usage: "create/update/delete local files based on IMAP box change"},
+			},
+			Action: func(c *cli.Context) error {
+				config, err := loadConfig(c)
+				if err != nil {
+					return err
+				}
+
+				ic, err := initIMAP(config)
+				if err != nil {
+					return err
+				}
+
+				s1 := make([]snapshot)
+				if c.Bool("sync") {
+					var seq, subject string
+					if subject = c.String("subject"); subject != "" {
+						seq = resolveSeqBySubject(ic, subject)
+					} else {
+						seq = "1:9999999"
+					}
+
+					mm, err := c.Fetch(seq)
+					if err != nil {
+						return err
+					}
+
+					// take a snapshot s1
+					for _, m := range mm {
+						dm, err := imapclient.DecodeMailMessage(m)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "snapshot error %s: %v\n", m.Header.Get("Subject"), err)
+							break
+						}
+
+						tm, err := m.Header.Date()
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "snapshot error parsing %v of %s: %v\n", m.Header.Get("Subject"), m.Header.Date(), err)
+							break
+						}
+
+						s1 = append(s1, snapshot{
+							name:      dm.Header.Get("Subject"),
+							timestamp: tm,
+						})
+					}
+				}
+
+				fmt.Fprintf(os.Stderr, "Press Ctrl+C to quit\n")
+				for {
+					log.Debug("IdleWait")
+					err := ic.IdleWait()
+					if err != nil {
+						return fmt.Errorf("failed to idle: %v", err)
+					}
+					log.Debug("Done")
+					ic.Done()
+
+					var seq, subject string
+					if subject = c.String("subject"); subject != "" {
+						seq = resolveSeqBySubject(ic, subject)
+					} else {
+						seq = "1:9999999"
+					}
+
+					s1 := make([]snapshot)
+					if c.Bool("sync") {
+						var seq, subject string
+						if subject = c.String("subject"); subject != "" {
+							seq = resolveSeqBySubject(ic, subject)
+						} else {
+							seq = "1:9999999"
+						}
+
+						mm, err := c.Fetch(seq)
+						if err != nil {
+							return err
+						}
+
+						// take a snapshot s1
+						for _, m := range mm {
+							dm, err := imapclient.DecodeMailMessage(m)
+							if err != nil {
+								fmt.Fprintf(os.Stderr, "snapshot error %s: %v\n", m.Header.Get("Subject"), err)
+								break
+							}
+
+							tm, err := m.Header.Date()
+							if err != nil {
+								fmt.Fprintf(os.Stderr, "snapshot error parsing %v of %s: %v\n", m.Header.Get("Subject"), m.Header.Date(), err)
+								break
+							}
+
+							s1 = append(s1, snapshot{
+								name:      dm.Header.Get("Subject"),
+								timestamp: tm,
+							})
+						}
+					} else {
+						log.Debug("getMessagesBySeq")
+						err = getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), "subject", c.String("ext"))
+						if err != nil {
+							return err
+						}
+					}
 				}
 
 				return nil
