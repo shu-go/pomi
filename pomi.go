@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -653,24 +652,13 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		os.Exit(1)
 	}
 
-	seqs := make([]uint32, 0, len(msgs))
-	for k := range msgs {
-		seqs = append(seqs, k)
-	}
-	sort.Sort(uint32slice(seqs))
-
-	for _, seq := range seqs {
-		m := msgs[seq]
-		mm, err := imapclient.DecodeMailMessage(m, true)
+	for seq, msg := range msgs {
+		textMsg, err := decodeMessageAsTextMessage(msg, true)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to decode %dth message: %v\n", seq, err)
-			if len(mm) != 0 {
-				fmt.Fprintf(os.Stderr, "headers:%#v", mm[0].Header)
-			}
-			os.Exit(1)
+			return err
 		}
-		m = pickupTextPartMessage(mm)
-		fmt.Printf("%d %v (%v)\n", seq, m.Header.Get("Subject"), m.Header.Get("Date"))
+
+		fmt.Printf("%d %v (%v)\n", seq, textMsg.Header.Get("Subject"), textMsg.Header.Get("Date"))
 	}
 
 	return nil
@@ -690,55 +678,81 @@ func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output
 	}
 
 	for _, m := range mm {
-		orgM := m
-		mm, err := imapclient.DecodeMailMessage(m)
-		if err != nil {
-			hmm, herr := imapclient.DecodeMailMessage(orgM, true)
-			if herr != nil {
-				return herr
-			}
-			hm := pickupTextPartMessage(hmm)
-			return fmt.Errorf("on subject[%v]: %v", hm.Header.Get("Subject"), err)
-		}
-		m = pickupTextPartMessage(mm)
-
-		file, err := getOutputWriteCloser(output, dir, m.Header.Get("Subject"), ext)
-		if err != nil {
-			return fmt.Errorf("on subject[%v]: %v", m.Header.Get("Subject"), err)
-		}
-
-		if header {
-			for k, v := range m.Header {
-				file.Write([]byte(k))
-				file.Write([]byte{':', ' '})
-				file.Write([]byte(v[0]))
-				file.Write([]byte{'\r', '\n'})
-			}
-			file.Write([]byte{'\r', '\n'})
-		}
-
-		body, err := ioutil.ReadAll(m.Body)
-		if err != nil {
-			return fmt.Errorf("on subject[%v]: body reading error: %v", m.Header.Get("Subject"), err)
-		}
-		file.Write(body)
-
-		if file != os.Stdout {
-			name := file.Name()
-			file.Close()
-
-			// change timestamps
-			tm, err := m.Header.Date()
-			if err == nil {
-				err = os.Chtimes(name, tm, tm)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "on subject[%v]: failed to change timestamp of %q: %v\n", m.Header.Get("Subject"), name, err)
-				}
-			}
+		if _, _, err := writeMessageToFile(m, header, output, dir, ext); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+func decodeMessageAsTextMessage(msg *mail.Message, header bool) (*mail.Message, error) {
+	decodedMsg, err := imapclient.DecodeMailMessage(msg, header)
+	if err != nil {
+		// try to refer headers
+		headerMsg, herr := imapclient.DecodeMailMessage(msg, true)
+		if herr != nil {
+			return nil, herr
+		}
+		decodedHeaderMsg := pickupTextPartMessage(headerMsg)
+		return nil, fmt.Errorf("on subject[%v]: %v", decodedHeaderMsg.Header.Get("Subject"), err)
+	}
+	if len(decodedMsg) == 0 {
+		return nil, fmt.Errorf("no decodable messages found on subject[%v]", msg.Header.Get("Subject"))
+	}
+
+	textMsg := pickupTextPartMessage(decodedMsg)
+	if textMsg == nil {
+		return nil, fmt.Errorf("no text part found on subject[%v]", decodedMsg[0].Header.Get("Subject"))
+	}
+
+	return textMsg, nil
+}
+
+func writeMessageToFile(msg *mail.Message, header bool, output, dir, ext string) (filename string, ts time.Time, err error) {
+	textMsg, err := decodeMessageAsTextMessage(msg, false)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	file, err := getOutputWriteCloser(output, dir, textMsg.Header.Get("Subject"), ext)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("on subject[%v]: %v", textMsg.Header.Get("Subject"), err)
+	}
+
+	if header {
+		for k, v := range textMsg.Header {
+			file.Write([]byte(k))
+			file.Write([]byte{':', ' '})
+			file.Write([]byte(v[0]))
+			file.Write([]byte{'\r', '\n'})
+		}
+		file.Write([]byte{'\r', '\n'})
+	}
+
+	body, err := ioutil.ReadAll(textMsg.Body)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("on subject[%v]: body reading error: %v", textMsg.Header.Get("Subject"), err)
+	}
+	file.Write(body)
+
+	if file != os.Stdout {
+		name := file.Name()
+		file.Close()
+
+		// change timestamps
+		tm, err := textMsg.Header.Date()
+		if err == nil {
+			err = os.Chtimes(name, tm, tm)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "on subject[%v]: failed to change timestamp of %q: %v\n", textMsg.Header.Get("Subject"), name, err)
+			}
+		}
+		return name, tm, nil
+	} else {
+		return "", time.Time{}, nil
+	}
+
 }
 
 func getOutputWriteCloser(output, dir, subject, ext string) (*os.File, error) {
