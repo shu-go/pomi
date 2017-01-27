@@ -201,18 +201,9 @@ func main() {
 				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
 			},
 			Action: func(c *cli.Context) error {
-				//log.Debug("list")
-				config, err := loadConfig(c.GlobalString("config"))
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				return listMessages(ic, c.String("criteria"), strings.Join(c.Args(), " "))
+				configPath := c.GlobalString("config")
+				criteria := c.String("criteria")
+				return runList(configPath, criteria, strings.Join(c.Args(), " "))
 			},
 		},
 		{
@@ -633,7 +624,40 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 	return nil
 }
 
-func listMessages(c *imapclient.Client, criteria, keyword string) error {
+func runList(configPath, criteria, keyword string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+
+	list, err := listMessages(ic, criteria, keyword)
+	if err != nil {
+		return fmt.Errorf("listing error: %v", err)
+	}
+
+	if len(list) == 0 {
+		fmt.Fprintf(os.Stderr, "no messages\n")
+	} else {
+		for _, e := range list {
+			fmt.Printf("%d %v (%v)\n", e.Seq, e.Subject, e.Date)
+		}
+	}
+
+	return nil
+}
+
+type listElement struct {
+	Seq     uint32
+	Subject string
+	Date    string
+}
+
+func listMessages(c *imapclient.Client, criteria, keyword string) ([]listElement, error) {
 	var ids []uint32
 	var err error
 
@@ -643,19 +667,18 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		ids, err = c.Search(criteria, keyword)
 	}
 	if err != nil {
-		return fmt.Errorf("failed to list messages: %v\n", err)
+		return nil, fmt.Errorf("failed to list messages: %v\n", err)
 	}
 	if len(ids) == 0 {
-		fmt.Fprintf(os.Stderr, "no messages\n")
-		return nil
+		return nil, nil
 	}
 
 	//log.Printf("ids=%#v\n", ids)
 	seqset := joinUint32(ids, ",")
 	//log.Printf("seqset=%v\n", seqset)
-	msgs, err := c.Fetch(seqset)
+	msgs, err := c.Fetch(seqset, true)
 	if err != nil {
-		return fmt.Errorf("failed to fetch messages: %v\n", err)
+		return nil, fmt.Errorf("failed to fetch messages: %v\n", err)
 	}
 
 	// convert random []seq in map[seq]msg to sorted []seqs
@@ -667,17 +690,22 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		return seqs[i] < seqs[j]
 	})
 
+	list := make([]listElement, 0, len(msgs))
 	for _, seq := range seqs {
 		msg := msgs[seq]
 		textMsg, err := decodeMessageAsTextMessage(msg, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		fmt.Printf("%d %v (%v)\n", seq, textMsg.Header.Get("Subject"), textMsg.Header.Get("Date"))
+		list = append(list, listElement{
+			Seq:     seq,
+			Subject: textMsg.Header.Get("Subject"),
+			Date:    textMsg.Header.Get("Date"),
+		})
 	}
 
-	return nil
+	return list, nil
 }
 
 func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output, ext string) error {
