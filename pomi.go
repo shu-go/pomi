@@ -636,12 +636,11 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		ids, err = c.Search(criteria, keyword)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to list messages: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to list messages: %v\n", err)
 	}
 	if len(ids) == 0 {
 		fmt.Fprintf(os.Stderr, "no messages\n")
-		return err
+		return nil
 	}
 
 	//log.Printf("ids=%#v\n", ids)
@@ -649,8 +648,7 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 	//log.Printf("seqset=%v\n", seqset)
 	msgs, err := c.Fetch(seqset)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to fetch messages: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to fetch messages: %v\n", err)
 	}
 
 	// convert random []seq in map[seq]msg to sorted []seqs
