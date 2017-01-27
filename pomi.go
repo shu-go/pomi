@@ -79,7 +79,7 @@ func main() {
 				cli.IntFlag{Name: "timeout", Value: 60, Usage: "set `TIMEOUT` (in seconds) on authentication transaction. < 0 is infinite."},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -201,7 +201,7 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				//log.Debug("list")
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -225,7 +225,7 @@ func main() {
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -266,7 +266,7 @@ func main() {
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -303,7 +303,7 @@ func main() {
 				cli.StringFlag{Name: "name", Usage: "if from stdin, specify the name of it"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -390,7 +390,7 @@ func main() {
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
@@ -441,12 +441,12 @@ func main() {
 	return
 }
 
-func loadConfig(c *cli.Context) (*config, error) {
+func loadConfig(path string) (*config, error) {
 	config := new(config)
-	_, err := toml.DecodeFile(c.GlobalString("config"), config)
+	_, err := toml.DecodeFile(path, config)
 	if err != nil {
 		//return nil, fmt.Errorf("failed to open %v: %v\n", c.GlobalString("config"), err)
-		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", c.GlobalString("config"))
+		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", path)
 		config.IMAP.Server = defaultIMAPServer
 		config.IMAP.Box = defaultIMAPBox
 		if err = saveConfig(config, c); err != nil {
