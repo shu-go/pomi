@@ -83,6 +83,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				timeout := time.Duration(c.Int("timeout"))
 				if timeout > 0 {
@@ -229,6 +230,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				ic, err := initIMAP(config)
 				if err != nil {
@@ -270,6 +272,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				ic, err := initIMAP(config)
 				if err != nil {
@@ -307,6 +310,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				ic, err := initIMAP(config)
 				if err != nil {
@@ -394,6 +398,7 @@ func main() {
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				ic, err := initIMAP(config)
 				if err != nil {
@@ -441,6 +446,14 @@ func main() {
 	return
 }
 
+func setAuthVariables(config *config) {
+	// use own client id?
+	if config.AUTH.ClientID != "" {
+		apiClientID = config.AUTH.ClientID
+		apiClientSecret = config.AUTH.ClientSecret
+	}
+}
+
 func loadConfig(path string) (*config, error) {
 	config := new(config)
 	_, err := toml.DecodeFile(path, config)
@@ -453,12 +466,6 @@ func loadConfig(path string) (*config, error) {
 			return nil, fmt.Errorf("failed to access to config: %v", err)
 		}
 		fmt.Fprintf(os.Stderr, "created.\n")
-	}
-
-	// use own client id?
-	if config.AUTH.ClientID != "" {
-		apiClientID = config.AUTH.ClientID
-		apiClientSecret = config.AUTH.ClientSecret
 	}
 
 	return config, nil
