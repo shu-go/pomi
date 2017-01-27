@@ -216,7 +216,7 @@ func main() {
 		},
 		{
 			Name:    "show",
-			Aliases: []string{"g"},
+			Aliases: []string{"s"},
 			Usage:   "show messages",
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "all", Usage: "show all messages"},
