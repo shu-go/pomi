@@ -165,7 +165,7 @@ func main() {
 				inforesp, err := http.Get(fmt.Sprintf("%s?%s", infoURL, form.Encode()))
 				if err != nil {
 					// save with User unchanged.
-					saveConfig(config, c)
+					saveConfig(config, c.GlobalString("config"))
 					return fmt.Errorf("failed to get email address: %v", err)
 				}
 				defer inforesp.Body.Close()
@@ -187,7 +187,7 @@ func main() {
 				}
 				config.IMAP.User = e.Data.Email
 
-				saveConfig(config, c)
+				saveConfig(config, c.GlobalString("config"))
 
 				return nil
 			},
@@ -449,7 +449,7 @@ func loadConfig(path string) (*config, error) {
 		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", path)
 		config.IMAP.Server = defaultIMAPServer
 		config.IMAP.Box = defaultIMAPBox
-		if err = saveConfig(config, c); err != nil {
+		if err = saveConfig(config, path); err != nil {
 			return nil, fmt.Errorf("failed to access to config: %v", err)
 		}
 		fmt.Fprintf(os.Stderr, "created.\n")
@@ -464,12 +464,12 @@ func loadConfig(path string) (*config, error) {
 	return config, nil
 }
 
-func saveConfig(config *config, c *cli.Context) error {
+func saveConfig(config *config, path string) error {
 	buf := new(bytes.Buffer)
 	if err := toml.NewEncoder(buf).Encode(config); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(c.GlobalString("config"), buf.Bytes(), 0700)
+	return ioutil.WriteFile(path, buf.Bytes(), 0700)
 }
 
 func initIMAP(config *config) (*imapclient.Client, error) {
