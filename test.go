@@ -68,7 +68,7 @@ func setupLocal(t *testing.T) {
 		t.Fatalf("pomera_sync exists. remove first: %v", err)
 	}
 
-	if err := os.MkdirAll("pomera_sync", 0x600); err != nil {
+	if err := os.MkdirAll("pomera_sync", os.ModeDir); err != nil {
 		t.Fatalf("failed to create dir pomera_sync: %v", err)
 	}
 }
@@ -90,4 +90,26 @@ func makeMailMessage(subject, body string, date time.Time) *mail.Message {
 		panic(err)
 	}
 	return msg
+}
+
+func wipeoutLocalFiles(t *testing.T, path string) {
+	matches, err := filepath.Glob(path + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, fn := range matches {
+		err = os.Remove(fn)
+		if err != nil {
+			panic(fmt.Errorf("removing %s: %v", fn, err))
+		}
+	}
+
+	matches, err = filepath.Glob(path + "/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("not empty after wipe: %#v", matches)
+	}
 }
