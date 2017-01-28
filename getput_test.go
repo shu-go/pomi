@@ -96,7 +96,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		for _, f := range testdata {
 			if data, err := ioutil.ReadFile("pomera_sync/" + f.Name); err != nil {
 				t.Errorf("failed to read %v: %v", "テスト.txt", err)
-			} else if string(data[3:]) != f.Data {
+			} else if string(data[3:] /* exclude BOM */) != f.Data {
 				t.Errorf("wrong content %q", string(data))
 			}
 		}
