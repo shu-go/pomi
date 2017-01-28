@@ -551,6 +551,7 @@ func runList(configPath, criteria, keyword string) error {
 	if err != nil {
 		return fmt.Errorf("listing error: %v", err)
 	}
+	ic.Logout()
 
 	if len(list) == 0 {
 		fmt.Fprintf(os.Stderr, "no messages\n")
