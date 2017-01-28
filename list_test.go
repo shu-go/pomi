@@ -7,14 +7,7 @@ import (
 
 func TestList(t *testing.T) {
 	config, ic := getTestFixtures()
-
-	if err := ic.Create(config.IMAP.Box); err != nil {
-		t.Fatalf("failed to create box %q: %v", config.IMAP.Box, err)
-	}
-
-	if err := ic.Select(config.IMAP.Box); err != nil {
-		t.Fatalf("failed to select box %q: %v", config.IMAP.Box, err)
-	}
+	setupTestBox(t, config, ic)
 
 	if list, err := listMessages(ic, "", ""); err != nil {
 		t.Errorf("failed to list messages: %v", err)
@@ -57,7 +50,6 @@ func TestList(t *testing.T) {
 		}
 	}
 
-	if err := ic.Delete(config.IMAP.Box); err != nil {
-		t.Fatalf("failed to delete box %q: %v", config.IMAP.Box, err)
-	}
+	teardownTestBox(t, config, ic)
+	ic.Logout()
 }
