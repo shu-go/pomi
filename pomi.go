@@ -297,83 +297,10 @@ func main() {
 				cli.StringFlag{Name: "name", Usage: "if from stdin, specify the name of it"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c.GlobalString("config"))
-				if err != nil {
-					return err
-				}
-				setAuthVariables(config)
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-				ic.Logout()
-
-				filenames := c.Args()
-				fmt.Fprintf(os.Stderr, "searching files in %v\n", c.GlobalString("dir"))
-				for _, fp := range filenames {
-					matches, err := filepath.Glob(filepath.Join(c.GlobalString("dir"), fp))
-					if err != nil {
-						continue
-					}
-					if len(matches) == 0 {
-						fmt.Fprintf(os.Stderr, "no matches\n")
-					}
-
-					var mu sync.Mutex
-					errs := []error{}
-					var wg sync.WaitGroup
-
-					for _, fn := range matches {
-						wg.Add(1)
-
-						go func(fn string) {
-							//log.Debug(fn)
-
-							f, err := os.Open(fn)
-							if err != nil {
-								mu.Lock()
-								fmt.Fprintf(os.Stderr, "failed to open file %v: %v\n", fn, err)
-								mu.Unlock()
-								return
-							}
-
-							mu.Lock()
-							fmt.Fprintf(os.Stderr, "putting %v\n", fn)
-							mu.Unlock()
-
-							_, subject := filepath.Split(filepath.Base(fn))
-							extpos := strings.LastIndex(subject, ".")
-							if extpos != -1 {
-								subject = subject[:extpos]
-							}
-
-							var tm time.Time
-							info, err := f.Stat()
-							if err == nil {
-								tm = info.ModTime()
-							}
-
-							//log.Debug("putMessage", fn)
-							iic, _ := initIMAP(config)
-							err = putMessage(config, iic, subject, f, tm)
-							//log.Debug("end putMessage", fn)
-							if err != nil {
-								mu.Lock()
-								errs = append(errs, err)
-								mu.Unlock()
-								return
-							}
-
-							iic.Logout()
-							f.Close()
-
-							wg.Done()
-						}(fn)
-					}
-					wg.Wait()
-				}
-				return nil
+				configPath := c.GlobalString("config")
+				syncDirPath := c.GlobalString("dir")
+				stdinName := c.String("name")
+				return runPut(configPath, syncDirPath, c.Args(), stdinName)
 			},
 		},
 		{
@@ -537,7 +464,7 @@ func connIMAP(config *config) (*imapclient.Client, error) {
 	return c, nil
 }
 
-func putMessage(config *config, c *imapclient.Client, subject string, file *os.File, tm time.Time) error {
+func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, tm time.Time) error {
 	var m *mail.Message
 
 	ids, err := c.Search("SUBJECT", subject)
@@ -571,7 +498,6 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 		m.Header["Content-Type"] = []string{"text/plain; charset=\"utf-8-sig\""}
 
 		// for pomera
-		from := config.IMAP.User
 		if strings.Index(from, "@") == -1 {
 			from += "@gmail.com"
 		}
@@ -616,7 +542,7 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 		}
 	}
 
-	err = c.Append(config.IMAP.Box, nil, *m)
+	err = c.Append(box, nil, *m)
 	if err != nil {
 		return fmt.Errorf("message append error of %q: %v", subject, err)
 	}
@@ -629,6 +555,7 @@ func runList(configPath, criteria, keyword string) error {
 	if err != nil {
 		return err
 	}
+	setAuthVariables(config)
 
 	ic, err := initIMAP(config)
 	if err != nil {
@@ -649,6 +576,117 @@ func runList(configPath, criteria, keyword string) error {
 	}
 
 	return nil
+}
+
+func runPut(configPath, syncDirPath string, patterns []string, stdinName string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+	ic.Logout() // re-connect in goroutine
+
+	disp := func(fn string, err error) {
+		if err == nil {
+			fmt.Fprintf(os.Stderr, "putting %v\n", fn)
+		} else {
+			fmt.Fprintf(os.Stderr, "failed to put file %v: %v\n", fn, err)
+		}
+	}
+
+	if len(stdinName) == 0 {
+		fmt.Fprintf(os.Stderr, "searching files in %v\n", syncDirPath)
+	} else {
+		fmt.Fprintf(os.Stderr, "searching files from stdin as %v\n", stdinName)
+	}
+
+	cnt, err := putMessages(config, syncDirPath, patterns, stdinName, disp)
+	if err != nil {
+		return err
+	}
+	if cnt == 0 {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+	}
+
+	return nil
+}
+
+func putMessages(config *config, syncDirPath string, patterns []string, stdinName string, disp func(string, error)) (count int, err error) {
+	for _, pat := range patterns {
+		matches, err := filepath.Glob(filepath.Join(syncDirPath, pat))
+		if err != nil {
+			continue
+		}
+		if len(matches) == 0 {
+			return 0, nil
+		}
+
+		var mu sync.Mutex
+		errs := []error{}
+		var wg sync.WaitGroup
+
+		for _, fn := range matches {
+			wg.Add(1)
+			go func(fn string) {
+				//log.Debug(fn)
+
+				f, err := os.Open(fn)
+				if err != nil {
+					if disp != nil {
+						mu.Lock()
+						disp(fn, err)
+						mu.Unlock()
+					}
+					return
+				}
+
+				if disp != nil {
+					mu.Lock()
+					disp(fn, nil)
+					mu.Unlock()
+				}
+
+				_, subject := filepath.Split(filepath.Base(fn))
+				extpos := strings.LastIndex(subject, ".")
+				if extpos != -1 {
+					subject = subject[:extpos]
+				}
+
+				var tm time.Time
+				info, err := f.Stat()
+				if err == nil {
+					tm = info.ModTime()
+				}
+
+				//log.Debug("putMessage", fn)
+				iic, _ := initIMAP(config)
+				err = putMessage(iic, config.IMAP.Box, config.IMAP.User, subject, f, tm)
+				//log.Debug("end putMessage", fn)
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, err)
+					mu.Unlock()
+					return
+				}
+				mu.Lock()
+				count++
+				mu.Unlock()
+
+				iic.Logout()
+				f.Close()
+
+				wg.Done()
+			}(fn)
+		}
+		wg.Wait()
+	}
+
+	return count, nil
 }
 
 type listElement struct {
