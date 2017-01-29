@@ -544,18 +544,7 @@ func runShow(configPath, syncDirPath string, header, all bool, seq, subject stri
 		return err
 	}
 
-	if all {
-		seq = "1:9999999"
-	} else if subject != "" {
-		seq = resolveSeqBySubject(ic, subject)
-	}
-
-	if seq == "" {
-		fmt.Fprintf(os.Stderr, "no matches\n")
-		return nil
-	}
-
-	err = getMessages(ic, header, seq, syncDirPath, "", stdoutWriter)
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
 	ic.Logout()
 
 	return err
@@ -573,18 +562,7 @@ func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext 
 		return err
 	}
 
-	if all {
-		seq = "1:9999999"
-	} else if subject != "" {
-		seq = resolveSeqBySubject(ic, subject)
-	}
-
-	if seq == "" {
-		fmt.Fprintf(os.Stderr, "no matches\n")
-		return nil
-	}
-
-	err = getMessages(ic, header, seq, syncDirPath, ext, filesWriter)
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
 	ic.Logout()
 
 	return err
@@ -799,8 +777,19 @@ func listMessages(c *imapclient.Client, criteria, keyword string) ([]listElement
 	return list, nil
 }
 
-func getMessages(c *imapclient.Client, header bool, seq string, syncDirPath, ext string, msgWriter MsgWriter) error {
-	mm, err := c.Fetch(seq)
+func getMessages(ic *imapclient.Client, header, all bool, subject, seq string, syncDirPath, ext string, msgWriter MsgWriter) error {
+	if all {
+		seq = "1:9999999"
+	} else if subject != "" {
+		seq = resolveSeqBySubject(ic, subject)
+	}
+
+	if seq == "" {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+		return nil
+	}
+
+	mm, err := ic.Fetch(seq)
 	if err != nil {
 		return err
 	}

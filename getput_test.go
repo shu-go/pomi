@@ -80,7 +80,7 @@ func TestPutAndListAndGet(t *testing.T) {
 	log.Debug("=================")
 
 	wipeoutLocalFiles(t, "pomera_sync")
-	getMessages(ic, false, "1:99999", "pomera_sync", "txt", filesWriter)
+	getMessages(ic, false, true, "", "", "pomera_sync", "txt", filesWriter)
 
 	filenames, err := filepath.Glob("pomera_sync/*")
 	if err != nil {
