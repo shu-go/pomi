@@ -39,21 +39,41 @@ func TestPutAndListAndGet(t *testing.T) {
 
 	// test
 
-	ioutil.WriteFile("pomera_sync/"+testdata[0].Name, []byte(testdata[0].Data), 0x600)
-	ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[0].Data), 0x600)
-	putMessages(config, "pomera_sync", []string{"*"}, "", nil)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[0].Name, []byte(testdata[0].Data), 0x600); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	}
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[0].Data), 0x600); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	}
+	if count, err := putMessages(config, "pomera_sync", []string{"*"}, "", nil); err != nil {
+		t.Errorf("failed to put messages: %v", err)
+	} else if count != 2 {
+		t.Errorf("wrong put count %v", count)
+	}
 
 	log.Debug("=================")
 
 	// overwrite
-	ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x600)
-	putMessages(config, "pomera_sync", []string{"テスト2.txt"}, "", nil)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x600); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	}
+	if count, err := putMessages(config, "pomera_sync", []string{"テスト2.txt"}, "", nil); err != nil {
+		t.Errorf("failed to put messages: %v", err)
+	} else if count != 1 {
+		t.Errorf("wrong put count %v", count)
+	}
 
 	log.Debug("=================")
 
 	// substring name
-	ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x600)
-	putMessages(config, "pomera_sync", []string{"テ.txt"}, "", nil)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x600); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	}
+	if count, err := putMessages(config, "pomera_sync", []string{"テ.txt"}, "", nil); err != nil {
+		t.Errorf("failed to put messages: %v", err)
+	} else if count != 1 {
+		t.Errorf("wrong put count %v", count)
+	}
 
 	log.Debug("=================")
 
@@ -80,7 +100,9 @@ func TestPutAndListAndGet(t *testing.T) {
 	log.Debug("=================")
 
 	wipeoutLocalFiles(t, "pomera_sync")
-	getMessages(ic, false, true, "", "", "pomera_sync", "txt", filesWriter)
+	if err := getMessages(ic, false, true, "", "", "pomera_sync", "txt", filesWriter); err != nil {
+		t.Errorf("failed to get messages: %v", err)
+	}
 
 	filenames, err := filepath.Glob("pomera_sync/*")
 	if err != nil {
