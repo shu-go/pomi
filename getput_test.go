@@ -15,15 +15,15 @@ func TestPutAndListAndGet(t *testing.T) {
 		Data string
 	}{
 		{
-			Name: "テスト.txt",
+			Name: "test.txt",
 			Data: "テストファイルです。\r\nテストファイルなんです。",
 		},
 		{
-			Name: "テスト2.txt",
+			Name: "test2.txt",
 			Data: "テストファイル 2 です。\r\nテストファイルなんです。",
 		},
 		{
-			Name: "テ.txt",
+			Name: "te.txt",
 			Data: "テです。\r\nテなんです。",
 		},
 	}
@@ -57,7 +57,7 @@ func TestPutAndListAndGet(t *testing.T) {
 	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x600); err != nil {
 		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
 	}
-	if count, err := putMessages(config, "pomera_sync", []string{"テスト2.txt"}, "", nil); err != nil {
+	if count, err := putMessages(config, "pomera_sync", []string{"test2.txt"}, "", nil); err != nil {
 		t.Errorf("failed to put messages: %v", err)
 	} else if count != 1 {
 		t.Errorf("wrong put count %v", count)
@@ -69,7 +69,7 @@ func TestPutAndListAndGet(t *testing.T) {
 	if err := ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x600); err != nil {
 		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
 	}
-	if count, err := putMessages(config, "pomera_sync", []string{"テ.txt"}, "", nil); err != nil {
+	if count, err := putMessages(config, "pomera_sync", []string{"te.txt"}, "", nil); err != nil {
 		t.Errorf("failed to put messages: %v", err)
 	} else if count != 1 {
 		t.Errorf("wrong put count %v", count)
@@ -117,7 +117,7 @@ func TestPutAndListAndGet(t *testing.T) {
 	} else {
 		for _, f := range testdata {
 			if data, err := ioutil.ReadFile("pomera_sync/" + f.Name); err != nil {
-				t.Errorf("failed to read %v: %v", "テスト.txt", err)
+				t.Errorf("failed to read %v: %v", "test.txt", err)
 			} else if string(data[3:] /* exclude BOM */) != f.Data {
 				t.Errorf("wrong content %q", string(data))
 			}
