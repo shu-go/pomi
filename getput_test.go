@@ -39,11 +39,11 @@ func TestPutAndListAndGet(t *testing.T) {
 
 	// test
 
-	if err := ioutil.WriteFile("pomera_sync/"+testdata[0].Name, []byte(testdata[0].Data), 0x600); err != nil {
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[0].Name, []byte(testdata[0].Data), 0x664); err != nil {
 		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
 	}
-	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[0].Data), 0x600); err != nil {
-		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[0].Data), 0x664); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[1].Name, err)
 	}
 	if count, err := putMessages(config, "pomera_sync", []string{"*"}, "", nil); err != nil {
 		t.Errorf("failed to put messages: %v", err)
@@ -54,8 +54,8 @@ func TestPutAndListAndGet(t *testing.T) {
 	log.Debug("=================")
 
 	// overwrite
-	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x600); err != nil {
-		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x664); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[1].Name, err)
 	}
 	if count, err := putMessages(config, "pomera_sync", []string{"test2.txt"}, "", nil); err != nil {
 		t.Errorf("failed to put messages: %v", err)
@@ -66,8 +66,8 @@ func TestPutAndListAndGet(t *testing.T) {
 	log.Debug("=================")
 
 	// substring name
-	if err := ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x600); err != nil {
-		t.Errorf("failed to write a file %v: %v", testdata[0].Name, err)
+	if err := ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x664); err != nil {
+		t.Errorf("failed to write a file %v: %v", testdata[2].Name, err)
 	}
 	if count, err := putMessages(config, "pomera_sync", []string{"te.txt"}, "", nil); err != nil {
 		t.Errorf("failed to put messages: %v", err)
