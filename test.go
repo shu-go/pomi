@@ -18,6 +18,7 @@ func getTestConfig() *config {
 		panic(err)
 	}
 	c.IMAP.Box = "pomi_test"
+	c.IMAP.User = os.Getenv("TEST_USER")
 	c.AUTH.ClientID = os.Getenv("API_CLIENT_ID")
 	c.AUTH.ClientSecret = os.Getenv("API_CLIENT_SECRET")
 	c.AUTH.RefreshToken = os.Getenv("TEST_API_REFRESHTOKEN")
