@@ -294,47 +294,15 @@ func main() {
 			Usage:   "delete messages",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
+				cli.BoolFlag{Name: "all", Usage: "delete all messages"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c.GlobalString("config"))
-				if err != nil {
-					return err
-				}
-				setAuthVariables(config)
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				var seq, subject string
-				if c.Bool("all") {
-					seq = "1:9999999"
-				} else {
-					if subject = c.String("subject"); subject != "" {
-						seq = resolveSeqBySubject(ic, subject)
-					} else {
-						seq = c.String("seq")
-					}
-				}
-
-				if seq == "" {
-					fmt.Println("no match")
-					return nil
-				}
-
-				err = ic.Store(seq, "+FLAGS", []string{imapclient.FlagDeleted})
-				if err != nil {
-					return err
-				}
-
-				err = ic.Expunge()
-				if err != nil {
-					return err
-				}
-
-				return nil
+				configPath := c.GlobalString("config")
+				subject := c.String("subject")
+				all := c.Bool("all")
+				seq := c.String("seq")
+				return runDelete(configPath, all, subject, seq)
 			},
 		},
 	}
@@ -655,6 +623,47 @@ func runPut(configPath, syncDirPath string, patterns []string, stdinName string)
 	}
 	if cnt == 0 {
 		fmt.Fprintf(os.Stderr, "no matches\n")
+	}
+
+	return nil
+}
+
+func runDelete(configPath string, all bool, subject, seq string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+
+	err = deleteMessage(ic, all, subject, seq)
+	return err
+}
+
+func deleteMessage(ic *imapclient.Client, all bool, subject, seq string) error {
+	if all {
+		seq = "1:9999999"
+	} else if subject != "" {
+		seq = resolveSeqBySubject(ic, subject)
+	}
+
+	if seq == "" {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+		return nil
+	}
+
+	err := ic.Store(seq, "+FLAGS", []string{imapclient.FlagDeleted})
+	if err != nil {
+		return err
+	}
+
+	err = ic.Expunge()
+	if err != nil {
+		return err
 	}
 
 	return nil
