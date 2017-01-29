@@ -92,6 +92,45 @@ func makeMailMessage(subject, body string, date time.Time) *mail.Message {
 	return msg
 }
 
+func msgsExistsExactly(t *testing.T, ic *imapclient.Client, subjects []string) {
+	list, err := listMessages(ic, "", "")
+	if err != nil {
+		t.Errorf("failed to list msgs: %v", err)
+	} else if len(list) != len(subjects) {
+		t.Errorf("wrong messages %v, wanted %v", len(list), len(subjects))
+		for _, e := range list {
+			t.Log(e)
+		}
+	} else {
+		//missing?
+		for _, se := range subjects {
+			found := false
+			for _, le := range list {
+				if le.Subject == se {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("subject %v is missing in the box", se)
+			}
+		}
+		// superfluous?
+		for _, le := range list {
+			found := false
+			for _, se := range subjects {
+				if le.Subject == se {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("subject %v is superfluous in the box", le)
+			}
+		}
+	}
+}
+
 func wipeoutLocalFiles(t *testing.T, path string) {
 	matches, err := filepath.Glob(path + "/*")
 	if err != nil {
