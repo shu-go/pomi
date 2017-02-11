@@ -420,20 +420,20 @@ func connIMAP(config *config) (*imapclient.Client, error) {
 func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, tm time.Time) error {
 	var m *mail.Message
 
-	ids, err := c.Search("SUBJECT", subject)
-	if err == nil && len(ids) > 0 {
-		if len(ids) > 1 {
+	seqs, err := c.Search("SUBJECT", subject)
+	if err == nil && len(seqs) > 0 {
+		if len(seqs) > 1 {
 			fmt.Fprintf(os.Stderr, "more than one messages are found for %q. skipped.\n", subject)
 			return nil
 		}
 
-		msgs, err := c.Fetch(fmt.Sprintf("%v", ids[0]))
+		msgs, err := c.Fetch(fmt.Sprintf("%v", seqs[0]))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to fetch message %q. skipped.", subject)
 			return nil
 		}
 
-		m = msgs[ids[0]]
+		m = msgs[seqs[0]]
 		if err != nil {
 			return fmt.Errorf("message(%q) read: %v", subject, err)
 		}
@@ -484,8 +484,8 @@ func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, 
 		return fmt.Errorf("message encode error of %q: %v", subject, err)
 	}
 
-	if len(ids) > 0 {
-		err = c.Store(fmt.Sprintf("%v", ids[0]), "+FLAGS", []string{imapclient.FlagDeleted})
+	if len(seqs) > 0 {
+		err = c.Store(fmt.Sprintf("%v", seqs[0]), "+FLAGS", []string{imapclient.FlagDeleted})
 		if err != nil {
 			return fmt.Errorf("flag set error of %q: %v", subject, err)
 		}
@@ -727,23 +727,23 @@ type listElement struct {
 }
 
 func listMessages(c *imapclient.Client, criteria, keyword string) ([]listElement, error) {
-	var ids []uint32
+	var seqs []uint32
 	var err error
 
 	if strings.Trim(keyword, " ") == "" {
-		ids, err = c.Search("ALL")
+		seqs, err = c.Search("ALL")
 	} else {
-		ids, err = c.Search(criteria, keyword)
+		seqs, err = c.Search(criteria, keyword)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list messages: %v\n", err)
 	}
-	if len(ids) == 0 {
+	if len(seqs) == 0 {
 		return nil, nil
 	}
 
-	//log.Printf("ids=%#v\n", ids)
-	seqset := joinUint32(ids, ",")
+	//log.Printf("seqs=%#v\n", seqs)
+	seqset := joinUint32(seqs, ",")
 	//log.Printf("seqset=%v\n", seqset)
 	msgs, err := c.Fetch(seqset, true)
 	if err != nil {
