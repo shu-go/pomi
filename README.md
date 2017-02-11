@@ -108,5 +108,14 @@ Windows ではコマンドプロンプトを使って操作をします。
     OPTIONS:
       --criteria value, -c value  criteria (default: "SUBJECT")
 
+# 更新履歴
+
+* 0.1.1 (2017-02-11)
+    - pomi put の際に、上書きか新規メッセージかを判断する基準をより細かくしました。
+
+        Subject が対象のファイル名(拡張子を除く)に厳密一致する場合は上書きになります。
+
+* 0.1.0
+
 ---
 >  vim: set et ft=markdown sts=4 sw=4 ts=4 tw=0 :
