@@ -59,6 +59,32 @@ var (
 	apiClientSecret string
 )
 
+type MsgWriter func(syncDirPath, subject, ext string, tm time.Time, r io.Reader) error
+
+var filesWriter MsgWriter = func(syncDirPath, subject, ext string, tm time.Time, r io.Reader) error {
+	name := filepath.Join(syncDirPath, subject+"."+ext)
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(name, data, 0x600)
+	if err != nil {
+		return fmt.Errorf("on subject[%v]: failed to write to %q: %v\n", subject, name, err)
+	}
+
+	err = os.Chtimes(name, tm, tm)
+	if err != nil {
+		return fmt.Errorf("on subject[%v]: failed to change timestamp of %q: %v\n", subject, name, err)
+	}
+
+	return nil
+}
+var stdoutWriter MsgWriter = func(syncDirPath, subject, ext string, tm time.Time, r io.Reader) error {
+	_, err := io.Copy(os.Stdout, r)
+	return err
+}
+
 const (
 	defaultIMAPServer = "imap.gmail.com:993"
 	defaultIMAPBox    = "Notes/pomera_sync"
@@ -79,10 +105,11 @@ func main() {
 				cli.IntFlag{Name: "timeout", Value: 60, Usage: "set `TIMEOUT` (in seconds) on authentication transaction. < 0 is infinite."},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
+				config, err := loadConfig(c.GlobalString("config"))
 				if err != nil {
 					return err
 				}
+				setAuthVariables(config)
 
 				timeout := time.Duration(c.Int("timeout"))
 				if timeout > 0 {
@@ -165,7 +192,7 @@ func main() {
 				inforesp, err := http.Get(fmt.Sprintf("%s?%s", infoURL, form.Encode()))
 				if err != nil {
 					// save with User unchanged.
-					saveConfig(config, c)
+					saveConfig(config, c.GlobalString("config"))
 					return fmt.Errorf("failed to get email address: %v", err)
 				}
 				defer inforesp.Body.Close()
@@ -187,7 +214,7 @@ func main() {
 				}
 				config.IMAP.User = e.Data.Email
 
-				saveConfig(config, c)
+				saveConfig(config, c.GlobalString("config"))
 
 				return nil
 			},
@@ -200,18 +227,9 @@ func main() {
 				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
 			},
 			Action: func(c *cli.Context) error {
-				//log.Debug("list")
-				config, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				return listMessages(ic, c.String("criteria"), strings.Join(c.Args(), " "))
+				configPath := c.GlobalString("config")
+				criteria := c.String("criteria")
+				return runList(configPath, criteria, strings.Join(c.Args(), " "))
 			},
 		},
 		{
@@ -225,33 +243,13 @@ func main() {
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				var seq, subject string
-				if c.Bool("all") {
-					seq = "1:9999999"
-				} else {
-					if subject = c.String("subject"); subject != "" {
-						seq = resolveSeqBySubject(ic, subject)
-					} else {
-						seq = c.String("seq")
-					}
-				}
-
-				if seq == "" {
-					fmt.Println("no match")
-					return nil
-				}
-
-				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), "stdout", "")
+				configPath := c.GlobalString("config")
+				syncDirPath := c.GlobalString("dir")
+				header := c.Bool("header")
+				all := c.Bool("all")
+				seq := c.String("seq")
+				subject := c.String("subject")
+				return runShow(configPath, syncDirPath, header, all, seq, subject)
 			},
 		},
 		{
@@ -266,33 +264,14 @@ func main() {
 				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				var seq, subject string
-				if c.Bool("all") {
-					seq = "1:9999999"
-				} else {
-					if subject = c.String("subject"); subject != "" {
-						seq = resolveSeqBySubject(ic, subject)
-					} else {
-						seq = c.String("seq")
-					}
-				}
-
-				if seq == "" {
-					fmt.Println("no match")
-					return nil
-				}
-
-				return getMessagesBySeq(ic, seq, c.Bool("header"), c.GlobalString("dir"), "subject", c.String("ext"))
+				configPath := c.GlobalString("config")
+				syncDirPath := c.GlobalString("dir")
+				header := c.Bool("header")
+				all := c.Bool("all")
+				seq := c.String("seq")
+				subject := c.String("subject")
+				ext := c.String("ext")
+				return runGet(configPath, syncDirPath, header, all, seq, subject, ext)
 			},
 		},
 		{
@@ -303,82 +282,10 @@ func main() {
 				cli.StringFlag{Name: "name", Usage: "if from stdin, specify the name of it"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-				ic.Logout()
-
-				filenames := c.Args()
-				fmt.Fprintf(os.Stderr, "searching files in %v\n", c.GlobalString("dir"))
-				for _, fp := range filenames {
-					matches, err := filepath.Glob(filepath.Join(c.GlobalString("dir"), fp))
-					if err != nil {
-						continue
-					}
-					if len(matches) == 0 {
-						fmt.Fprintf(os.Stderr, "no matches\n")
-					}
-
-					var mu sync.Mutex
-					errs := []error{}
-					var wg sync.WaitGroup
-
-					for _, fn := range matches {
-						wg.Add(1)
-
-						go func(fn string) {
-							//log.Debug(fn)
-
-							f, err := os.Open(fn)
-							if err != nil {
-								mu.Lock()
-								fmt.Fprintf(os.Stderr, "failed to open file %v: %v\n", fn, err)
-								mu.Unlock()
-								return
-							}
-
-							mu.Lock()
-							fmt.Fprintf(os.Stderr, "putting %v\n", fn)
-							mu.Unlock()
-
-							_, subject := filepath.Split(filepath.Base(fn))
-							extpos := strings.LastIndex(subject, ".")
-							if extpos != -1 {
-								subject = subject[:extpos]
-							}
-
-							var tm time.Time
-							info, err := f.Stat()
-							if err == nil {
-								tm = info.ModTime()
-							}
-
-							//log.Debug("putMessage", fn)
-							iic, _ := initIMAP(config)
-							err = putMessage(config, iic, subject, f, tm)
-							//log.Debug("end putMessage", fn)
-							if err != nil {
-								mu.Lock()
-								errs = append(errs, err)
-								mu.Unlock()
-								return
-							}
-
-							iic.Logout()
-							f.Close()
-
-							wg.Done()
-						}(fn)
-					}
-					wg.Wait()
-				}
-				return nil
+				configPath := c.GlobalString("config")
+				syncDirPath := c.GlobalString("dir")
+				stdinName := c.String("name")
+				return runPut(configPath, syncDirPath, c.Args(), stdinName)
 			},
 		},
 		{
@@ -387,46 +294,15 @@ func main() {
 			Usage:   "delete messages",
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
+				cli.BoolFlag{Name: "all", Usage: "delete all messages"},
 				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
 			},
 			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c)
-				if err != nil {
-					return err
-				}
-
-				ic, err := initIMAP(config)
-				if err != nil {
-					return err
-				}
-
-				var seq, subject string
-				if c.Bool("all") {
-					seq = "1:9999999"
-				} else {
-					if subject = c.String("subject"); subject != "" {
-						seq = resolveSeqBySubject(ic, subject)
-					} else {
-						seq = c.String("seq")
-					}
-				}
-
-				if seq == "" {
-					fmt.Println("no match")
-					return nil
-				}
-
-				err = ic.Store(seq, "+FLAGS", []string{imapclient.FlagDeleted})
-				if err != nil {
-					return err
-				}
-
-				err = ic.Expunge()
-				if err != nil {
-					return err
-				}
-
-				return nil
+				configPath := c.GlobalString("config")
+				subject := c.String("subject")
+				all := c.Bool("all")
+				seq := c.String("seq")
+				return runDelete(configPath, all, subject, seq)
 			},
 		},
 	}
@@ -441,35 +317,37 @@ func main() {
 	return
 }
 
-func loadConfig(c *cli.Context) (*config, error) {
-	config := new(config)
-	_, err := toml.DecodeFile(c.GlobalString("config"), config)
-	if err != nil {
-		//return nil, fmt.Errorf("failed to open %v: %v\n", c.GlobalString("config"), err)
-		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", c.GlobalString("config"))
-		config.IMAP.Server = defaultIMAPServer
-		config.IMAP.Box = defaultIMAPBox
-		if err = saveConfig(config, c); err != nil {
-			return nil, fmt.Errorf("failed to access to config: %v", err)
-		}
-		fmt.Fprintf(os.Stderr, "created.\n")
-	}
-
+func setAuthVariables(config *config) {
 	// use own client id?
 	if config.AUTH.ClientID != "" {
 		apiClientID = config.AUTH.ClientID
 		apiClientSecret = config.AUTH.ClientSecret
 	}
+}
+
+func loadConfig(path string) (*config, error) {
+	config := new(config)
+	_, err := toml.DecodeFile(path, config)
+	if err != nil {
+		//return nil, fmt.Errorf("failed to open %v: %v\n", c.GlobalString("config"), err)
+		fmt.Fprintf(os.Stderr, "missing %v. -> creating with minimal contents...", path)
+		config.IMAP.Server = defaultIMAPServer
+		config.IMAP.Box = defaultIMAPBox
+		if err = saveConfig(config, path); err != nil {
+			return nil, fmt.Errorf("failed to access to config: %v", err)
+		}
+		fmt.Fprintf(os.Stderr, "created.\n")
+	}
 
 	return config, nil
 }
 
-func saveConfig(config *config, c *cli.Context) error {
+func saveConfig(config *config, path string) error {
 	buf := new(bytes.Buffer)
 	if err := toml.NewEncoder(buf).Encode(config); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(c.GlobalString("config"), buf.Bytes(), 0700)
+	return ioutil.WriteFile(path, buf.Bytes(), 0700)
 }
 
 func initIMAP(config *config) (*imapclient.Client, error) {
@@ -539,41 +417,36 @@ func connIMAP(config *config) (*imapclient.Client, error) {
 	return c, nil
 }
 
-func putMessage(config *config, c *imapclient.Client, subject string, file *os.File, tm time.Time) error {
+func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, tm time.Time) error {
 	var m *mail.Message
 
-	ids, err := c.Search("SUBJECT", subject)
-	if err == nil && len(ids) > 0 {
-		if len(ids) > 1 {
-			fmt.Fprintf(os.Stderr, "more than one messages are found for %q. skipped.\n", subject)
-			return nil
-		}
+	seqs, err := c.Search("SUBJECT", subject)
+	msgmap, _ := c.Fetch(joinUint32(seqs, ","))
+	if err == nil && len(msgmap) > 0 {
+		for _, ref := range msgmap {
+			dref, err := imapclient.DecodeMailMessage(ref)
+			if err != nil {
+				continue
+			}
+			tref := pickupTextPartMessage(dref)
+			if tref == nil {
+				continue
+			}
 
-		msgs, err := c.Fetch(fmt.Sprintf("%v", ids[0]))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to fetch message %q. skipped.", subject)
-			return nil
+			if tref.Header.Get("Subject") == subject {
+				m = tref
+				break
+			}
 		}
+	}
 
-		m = msgs[ids[0]]
-		if err != nil {
-			return fmt.Errorf("message(%q) read: %v", subject, err)
-		}
-
-		mm, err := imapclient.DecodeMailMessage(m)
-		if err != nil {
-			return fmt.Errorf("message(%q) decode error: %v", subject, err)
-		}
-		m = pickupTextPartMessage(mm)
-
-	} else {
+	if m == nil {
 		m = new(mail.Message)
 		m.Header = make(mail.Header)
 		m.Header["Subject"] = []string{subject}
 		m.Header["Content-Type"] = []string{"text/plain; charset=\"utf-8-sig\""}
 
 		// for pomera
-		from := config.IMAP.User
 		if strings.Index(from, "@") == -1 {
 			from += "@gmail.com"
 		}
@@ -607,8 +480,8 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 		return fmt.Errorf("message encode error of %q: %v", subject, err)
 	}
 
-	if len(ids) > 0 {
-		err = c.Store(fmt.Sprintf("%v", ids[0]), "+FLAGS", []string{imapclient.FlagDeleted})
+	if len(seqs) > 0 {
+		err = c.Store(fmt.Sprintf("%v", seqs[0]), "+FLAGS", []string{imapclient.FlagDeleted})
 		if err != nil {
 			return fmt.Errorf("flag set error of %q: %v", subject, err)
 		}
@@ -618,7 +491,7 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 		}
 	}
 
-	err = c.Append(config.IMAP.Box, nil, *m)
+	err = c.Append(box, nil, *m)
 	if err != nil {
 		return fmt.Errorf("message append error of %q: %v", subject, err)
 	}
@@ -626,35 +499,255 @@ func putMessage(config *config, c *imapclient.Client, subject string, file *os.F
 	return nil
 }
 
-func listMessages(c *imapclient.Client, criteria, keyword string) error {
-	var ids []uint32
-	var err error
-
-	if strings.Trim(keyword, " ") == "" {
-		ids, err = c.Search("ALL")
-	} else {
-		ids, err = c.Search(criteria, keyword)
-	}
+func runList(configPath, criteria, keyword string) error {
+	config, err := loadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to list messages: %v\n", err)
-		os.Exit(1)
+		return err
 	}
-	if len(ids) == 0 {
-		fmt.Fprintf(os.Stderr, "no messages\n")
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
 		return err
 	}
 
-	//log.Printf("ids=%#v\n", ids)
-	seqset := joinUint32(ids, ",")
-	//log.Printf("seqset=%v\n", seqset)
-	msgs, err := c.Fetch(seqset)
+	list, err := listMessages(ic, criteria, keyword)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to fetch messages: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("listing error: %v", err)
+	}
+	ic.Logout()
+
+	if len(list) == 0 {
+		fmt.Fprintf(os.Stderr, "no messages\n")
+	} else {
+		for _, e := range list {
+			fmt.Printf("%d %v (%v)\n", e.Seq, e.Subject, e.Date)
+		}
+	}
+
+	return nil
+}
+
+func runShow(configPath, syncDirPath string, header, all bool, seq, subject string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
+	ic.Logout()
+
+	return err
+}
+
+func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
+	ic.Logout()
+
+	return err
+}
+
+func runPut(configPath, syncDirPath string, patterns []string, stdinName string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+	ic.Logout() // re-connect in goroutine
+
+	disp := func(fn string, err error) {
+		if err == nil {
+			fmt.Fprintf(os.Stderr, "putting %v\n", fn)
+		} else {
+			fmt.Fprintf(os.Stderr, "failed to put file %v: %v\n", fn, err)
+		}
+	}
+
+	if len(stdinName) == 0 {
+		fmt.Fprintf(os.Stderr, "searching files in %v\n", syncDirPath)
+	} else {
+		fmt.Fprintf(os.Stderr, "searching files from stdin as %v\n", stdinName)
+	}
+
+	cnt, err := putMessages(config, syncDirPath, patterns, stdinName, disp)
+	if err != nil {
+		return err
+	}
+	if cnt == 0 {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+	}
+
+	return nil
+}
+
+func runDelete(configPath string, all bool, subject, seq string) error {
+	config, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	setAuthVariables(config)
+
+	ic, err := initIMAP(config)
+	if err != nil {
+		return err
+	}
+
+	err = deleteMessage(ic, all, subject, seq)
+	return err
+}
+
+func deleteMessage(ic *imapclient.Client, all bool, subject, seq string) error {
+	if all {
+		seq = "1:9999999"
+	} else if subject != "" {
+		seq = resolveSeqBySubject(ic, subject)
+	}
+
+	if seq == "" {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+		return nil
+	}
+
+	err := ic.Store(seq, "+FLAGS", []string{imapclient.FlagDeleted})
+	if err != nil {
+		return err
+	}
+
+	err = ic.Expunge()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func putMessages(config *config, syncDirPath string, patterns []string, stdinName string, disp func(string, error)) (count int, err error) {
+	for _, pat := range patterns {
+		matches, err := filepath.Glob(filepath.Join(syncDirPath, pat))
+		if err != nil {
+			continue
+		}
+		if len(matches) == 0 {
+			return 0, nil
+		}
+
+		var mu sync.Mutex
+		errs := []error{}
+		var wg sync.WaitGroup
+
+		for _, fn := range matches {
+			wg.Add(1)
+			go func(fn string) {
+				//log.Debug(fn)
+
+				f, err := os.Open(fn)
+				if err != nil {
+					if disp != nil {
+						mu.Lock()
+						disp(fn, err)
+						mu.Unlock()
+					}
+					return
+				}
+
+				if disp != nil {
+					mu.Lock()
+					disp(fn, nil)
+					mu.Unlock()
+				}
+
+				_, subject := filepath.Split(filepath.Base(fn))
+				extpos := strings.LastIndex(subject, ".")
+				if extpos != -1 {
+					subject = subject[:extpos]
+				}
+
+				var tm time.Time
+				info, err := f.Stat()
+				if err == nil {
+					tm = info.ModTime()
+				}
+
+				//log.Debug("putMessage", fn)
+				iic, _ := initIMAP(config)
+				err = putMessage(iic, config.IMAP.Box, config.IMAP.User, subject, f, tm)
+				//log.Debug("end putMessage", fn)
+				if err != nil {
+					mu.Lock()
+					errs = append(errs, err)
+					mu.Unlock()
+					return
+				}
+				mu.Lock()
+				count++
+				mu.Unlock()
+
+				iic.Logout()
+				f.Close()
+
+				wg.Done()
+			}(fn)
+		}
+		wg.Wait()
+	}
+
+	return count, nil
+}
+
+type listElement struct {
+	Seq     uint32
+	Subject string
+	Date    string
+}
+
+func listMessages(c *imapclient.Client, criteria, keyword string) ([]listElement, error) {
+	var seqs []uint32
+	var err error
+
+	if strings.Trim(keyword, " ") == "" {
+		seqs, err = c.Search("ALL")
+	} else {
+		seqs, err = c.Search(criteria, keyword)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages: %v\n", err)
+	}
+	if len(seqs) == 0 {
+		return nil, nil
+	}
+
+	//log.Printf("seqs=%#v\n", seqs)
+	seqset := joinUint32(seqs, ",")
+	//log.Printf("seqset=%v\n", seqset)
+	msgs, err := c.Fetch(seqset, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch messages: %v\n", err)
 	}
 
 	// convert random []seq in map[seq]msg to sorted []seqs
-	seqs := make([]uint32, 0, len(msgs))
+	seqs = make([]uint32, 0, len(msgs))
 	for seq, _ := range msgs {
 		seqs = append(seqs, seq)
 	}
@@ -662,34 +755,55 @@ func listMessages(c *imapclient.Client, criteria, keyword string) error {
 		return seqs[i] < seqs[j]
 	})
 
+	list := make([]listElement, 0, len(msgs))
 	for _, seq := range seqs {
 		msg := msgs[seq]
 		textMsg, err := decodeMessageAsTextMessage(msg, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		fmt.Printf("%d %v (%v)\n", seq, textMsg.Header.Get("Subject"), textMsg.Header.Get("Date"))
+		list = append(list, listElement{
+			Seq:     seq,
+			Subject: textMsg.Header.Get("Subject"),
+			Date:    textMsg.Header.Get("Date"),
+		})
 	}
 
-	return nil
+	return list, nil
 }
 
-func getMessagesBySeq(c *imapclient.Client, seq string, header bool, dir, output, ext string) error {
-	mm, err := c.Fetch(seq)
+func getMessages(ic *imapclient.Client, header, all bool, subject, seq string, syncDirPath, ext string, msgWriter MsgWriter) error {
+	if all {
+		seq = "1:9999999"
+	} else if subject != "" {
+		seq = resolveSeqBySubject(ic, subject)
+	}
+
+	if seq == "" {
+		fmt.Fprintf(os.Stderr, "no matches\n")
+		return nil
+	}
+
+	mm, err := ic.Fetch(seq)
 	if err != nil {
 		return err
 	}
 
 	// arrange workdir
-	if dir != "." {
-		if err := os.MkdirAll(dir, os.ModeDir); err != nil {
+	if syncDirPath != "." {
+		if err := os.MkdirAll(syncDirPath, os.ModeDir); err != nil {
 			return err
 		}
 	}
 
 	for _, m := range mm {
-		if _, _, err := writeMessageToFile(m, header, output, dir, ext); err != nil {
+		textMsg, err := decodeMessageAsTextMessage(m, false)
+		if err != nil {
+			return err
+		}
+
+		if err := writeMessage(textMsg, header, syncDirPath, ext, msgWriter); err != nil {
 			return err
 		}
 	}
@@ -720,65 +834,40 @@ func decodeMessageAsTextMessage(msg *mail.Message, header bool) (*mail.Message, 
 	return textMsg, nil
 }
 
-func writeMessageToFile(msg *mail.Message, header bool, output, dir, ext string) (filename string, ts time.Time, err error) {
-	textMsg, err := decodeMessageAsTextMessage(msg, false)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-
-	file, err := getOutputWriteCloser(output, dir, textMsg.Header.Get("Subject"), ext)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("on subject[%v]: %v", textMsg.Header.Get("Subject"), err)
-	}
+func writeMessage(msg *mail.Message, header bool, syncDirPath, ext string, msgWriter MsgWriter) error {
+	buff := new(bytes.Buffer)
 
 	if header {
-		for k, v := range textMsg.Header {
-			file.Write([]byte(k))
-			file.Write([]byte{':', ' '})
-			file.Write([]byte(v[0]))
-			file.Write([]byte{'\r', '\n'})
+		for k, v := range msg.Header {
+			buff.Write([]byte(k))
+			buff.Write([]byte{':', ' '})
+			buff.Write([]byte(v[0]))
+			buff.Write([]byte{'\r', '\n'})
 		}
-		file.Write([]byte{'\r', '\n'})
+		buff.Write([]byte{'\r', '\n'})
 	}
 
-	body, err := ioutil.ReadAll(textMsg.Body)
+	body, err := ioutil.ReadAll(msg.Body)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("on subject[%v]: body reading error: %v", textMsg.Header.Get("Subject"), err)
+		return fmt.Errorf("on subject[%v]: body reading error: %v", msg.Header.Get("Subject"), err)
 	}
-	file.Write(body)
+	buff.Write(body)
 
-	if file != os.Stdout {
-		name := file.Name()
-		file.Close()
-
-		// change timestamps
-		tm, err := textMsg.Header.Date()
-		if err == nil {
-			err = os.Chtimes(name, tm, tm)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "on subject[%v]: failed to change timestamp of %q: %v\n", textMsg.Header.Get("Subject"), name, err)
-			}
-		}
-		return name, tm, nil
-	} else {
-		return "", time.Time{}, nil
+	tm, err := msg.Header.Date()
+	if err != nil {
+		return err
 	}
 
+	err = msgWriter(syncDirPath, msg.Header.Get("Subject"), ext, tm, buff)
+	return err
 }
 
-func getOutputWriteCloser(output, dir, subject, ext string) (*os.File, error) {
-	switch output {
-	case "stdout":
-		return os.Stdout, nil
-	case "subject":
-		file, err := os.Create(filepath.Join(dir, subject+"."+ext))
-		if err != nil {
-			return nil, err
-		}
-		return file, nil
+func getOutputWriteCloser(dir, subject, ext string) (*os.File, error) {
+	file, err := os.Create(filepath.Join(dir, subject+"."+ext))
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, nil
+	return file, nil
 }
 
 func resolveSeqBySubject(c *imapclient.Client, subject string) string {
