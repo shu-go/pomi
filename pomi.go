@@ -558,7 +558,7 @@ func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext 
 		return err
 	}
 
-	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", filesWriter)
 	ic.Logout()
 
 	return err
