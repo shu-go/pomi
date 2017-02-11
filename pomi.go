@@ -96,6 +96,13 @@ const (
 
 func main() {
 	app := cli.NewApp()
+	app.Name = "pomi"
+	app.Usage = "Pomera Sync IMAP tool"
+	app.Version = "0.1.1"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
+		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
+	}
 	app.Commands = []cli.Command{
 		{
 			Name:  "auth",
@@ -305,13 +312,6 @@ func main() {
 				return runDelete(configPath, all, subject, seq)
 			},
 		},
-	}
-	app.Name = "pomi"
-	app.Usage = "Pomera Sync IMAP tool"
-	app.Version = "0.1.0"
-	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
-		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
 	}
 	app.Run(os.Args)
 	return
