@@ -77,6 +77,15 @@ func TestPutAndListAndGet(t *testing.T) {
 
 	log.Debug("=================")
 
+	// test1, test2, and te do not collide
+	if count, err := putMessages(config, "pomera_sync", []string{"*"}, "", nil); err != nil {
+		t.Errorf("failed to put messages: %v", err)
+	} else if count != 3 {
+		t.Errorf("wrong put count %v", count)
+	}
+
+	log.Debug("=================")
+
 	ic, _ = initIMAP(config)
 	if list, err := listMessages(ic, "", ""); err != nil {
 		t.Errorf("failed to list messages: %v", err)

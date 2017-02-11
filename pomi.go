@@ -421,30 +421,26 @@ func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, 
 	var m *mail.Message
 
 	seqs, err := c.Search("SUBJECT", subject)
-	if err == nil && len(seqs) > 0 {
-		if len(seqs) > 1 {
-			fmt.Fprintf(os.Stderr, "more than one messages are found for %q. skipped.\n", subject)
-			return nil
-		}
+	msgmap, _ := c.Fetch(joinUint32(seqs, ","))
+	if err == nil && len(msgmap) > 0 {
+		for _, ref := range msgmap {
+			dref, err := imapclient.DecodeMailMessage(ref)
+			if err != nil {
+				continue
+			}
+			tref := pickupTextPartMessage(dref)
+			if tref == nil {
+				continue
+			}
 
-		msgs, err := c.Fetch(fmt.Sprintf("%v", seqs[0]))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to fetch message %q. skipped.", subject)
-			return nil
+			if tref.Header.Get("Subject") == subject {
+				m = tref
+				break
+			}
 		}
+	}
 
-		m = msgs[seqs[0]]
-		if err != nil {
-			return fmt.Errorf("message(%q) read: %v", subject, err)
-		}
-
-		mm, err := imapclient.DecodeMailMessage(m)
-		if err != nil {
-			return fmt.Errorf("message(%q) decode error: %v", subject, err)
-		}
-		m = pickupTextPartMessage(mm)
-
-	} else {
+	if m == nil {
 		m = new(mail.Message)
 		m.Header = make(mail.Header)
 		m.Header["Subject"] = []string{subject}
@@ -751,7 +747,7 @@ func listMessages(c *imapclient.Client, criteria, keyword string) ([]listElement
 	}
 
 	// convert random []seq in map[seq]msg to sorted []seqs
-	seqs := make([]uint32, 0, len(msgs))
+	seqs = make([]uint32, 0, len(msgs))
 	for seq, _ := range msgs {
 		seqs = append(seqs, seq)
 	}
