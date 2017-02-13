@@ -417,7 +417,7 @@ func connIMAP(config *config) (*imapclient.Client, error) {
 	return c, nil
 }
 
-func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, tm time.Time) error {
+func putMessage(c *imapclient.Client, box, from, subject, ext string, file *os.File, tm time.Time) error {
 	var m *mail.Message
 
 	seqs, err := c.Search("SUBJECT", subject)
@@ -458,6 +458,9 @@ func putMessage(c *imapclient.Client, box, from, subject string, file *os.File, 
 	}
 
 	m.Header["Date"] = []string{tm.Format(time.RFC1123Z)}
+	if len(ext) > 0 {
+		m.Header["X-Pomi-Ext"] = []string{ext}
+	}
 
 	//add BOM for pomera
 	{
@@ -558,7 +561,7 @@ func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext 
 		return err
 	}
 
-	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", filesWriter)
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, ext, filesWriter)
 	ic.Logout()
 
 	return err
@@ -679,8 +682,10 @@ func putMessages(config *config, syncDirPath string, patterns []string, stdinNam
 				}
 
 				_, subject := filepath.Split(filepath.Base(fn))
+				ext := ""
 				extpos := strings.LastIndex(subject, ".")
 				if extpos != -1 {
+					ext = subject[extpos+1:]
 					subject = subject[:extpos]
 				}
 
@@ -692,7 +697,7 @@ func putMessages(config *config, syncDirPath string, patterns []string, stdinNam
 
 				//log.Debug("putMessage", fn)
 				iic, _ := initIMAP(config)
-				err = putMessage(iic, config.IMAP.Box, config.IMAP.User, subject, f, tm)
+				err = putMessage(iic, config.IMAP.Box, config.IMAP.User, subject, ext, f, tm)
 				//log.Debug("end putMessage", fn)
 				if err != nil {
 					mu.Lock()
@@ -856,6 +861,11 @@ func writeMessage(msg *mail.Message, header bool, syncDirPath, ext string, msgWr
 	tm, err := msg.Header.Date()
 	if err != nil {
 		return err
+	}
+
+	pomiExt := msg.Header.Get("X-Pomi-Ext")
+	if len(pomiExt) > 0 {
+		ext = pomiExt
 	}
 
 	err = msgWriter(syncDirPath, msg.Header.Get("Subject"), ext, tm, buff)

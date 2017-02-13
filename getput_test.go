@@ -15,7 +15,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		Data string
 	}{
 		{
-			Name: "test.txt",
+			Name: "test.md",
 			Data: "テストファイルです。\r\nテストファイルなんです。",
 		},
 		{
@@ -95,7 +95,7 @@ func TestPutAndListAndGet(t *testing.T) {
 			return list[i].Date < list[j].Date
 		})
 		if len(list) != 3 ||
-			list[0].Subject+".txt" != testdata[0].Name ||
+			list[0].Subject+".md" != testdata[0].Name ||
 			list[1].Subject+".txt" != testdata[1].Name ||
 			list[2].Subject+".txt" != testdata[2].Name {
 			//
