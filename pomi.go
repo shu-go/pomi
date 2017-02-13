@@ -96,6 +96,13 @@ const (
 
 func main() {
 	app := cli.NewApp()
+	app.Name = "pomi"
+	app.Usage = "Pomera Sync IMAP tool"
+	app.Version = "0.1.1"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
+		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
+	}
 	app.Commands = []cli.Command{
 		{
 			Name:  "auth",
@@ -234,7 +241,7 @@ func main() {
 		},
 		{
 			Name:    "show",
-			Aliases: []string{"g"},
+			Aliases: []string{"s"},
 			Usage:   "show messages",
 			Flags: []cli.Flag{
 				cli.BoolFlag{Name: "all", Usage: "show all messages"},
@@ -305,13 +312,6 @@ func main() {
 				return runDelete(configPath, all, subject, seq)
 			},
 		},
-	}
-	app.Name = "pomi"
-	app.Usage = "Pomera Sync IMAP tool"
-	app.Version = "0.1.0"
-	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
-		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
 	}
 	app.Run(os.Args)
 	return
@@ -558,7 +558,7 @@ func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext 
 		return err
 	}
 
-	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
+	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", filesWriter)
 	ic.Logout()
 
 	return err
