@@ -98,7 +98,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "pomi"
 	app.Usage = "Pomera Sync IMAP tool"
-	app.Version = "0.1.1"
+	app.Version = "0.1.2"
 	app.Flags = []cli.Flag{
 		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
 		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
