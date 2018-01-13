@@ -17,14 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"bitbucket.org/shu/gli"
 	"bitbucket.org/shu/imapclient"
-	"bitbucket.org/shu/log"
 	"github.com/BurntSushi/toml"
-	"github.com/pkg/browser"
-	"github.com/urfave/cli"
 )
-
-var _ = log.Print
 
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
@@ -94,226 +90,31 @@ const (
 	oauth2Scope        = "https://mail.google.com/ email"
 )
 
+type globalCmd struct {
+	Auth   authCmd   `help:"authenticate with gmail"`
+	List   listCmd   `cli:"list, ls, l"  help:"list messages"`
+	Show   showCmd   `cli:"show, s"  help:"show messages"`
+	Get    getCmd    `cli:"get, g"  help:"get messages"`
+	Put    putCmd    `cli:"put, p"  help:"put messages"`
+	Delete deleteCmd `cli:"delete, del, d"  help:"delete messages"`
+
+	Config string `cli:"config=CONFIG_FILE, conf"  default:"./pomi.toml"  help:"path to a configuration file"`
+	Dir    string `cli:"dir=DIR, d"  default:"./pomera_sync"  help:"path to a local directory"`
+}
+
 func main() {
-	app := cli.NewApp()
+	app := gli.New(&globalCmd{})
 	app.Name = "pomi"
-	app.Usage = "Pomera Sync IMAP tool"
-	app.Version = "0.1.2"
-	app.Flags = []cli.Flag{
-		cli.StringFlag{Name: "config, conf", Value: "./pomi.toml", Usage: "load the configuration from `CONFIG`"},
-		cli.StringFlag{Name: "dir, d", Value: "./pomera_sync", Usage: "set local directory to `DIR`"},
+	app.Desc = "Pomera Sync IMAP tool"
+	app.Version = "0.1.3"
+	app.Usage = `1. pomi auth
+2. pomi get --all`
+
+	_, _, err := app.Run(os.Args)
+	if err != nil {
+		os.Exit(1)
 	}
-	app.Commands = []cli.Command{
-		{
-			Name:  "auth",
-			Usage: "authenticate with gmail",
-			Flags: []cli.Flag{
-				cli.IntFlag{Name: "port", Value: 7878, Usage: "a temporal `PORT` for OAuth authentication. 0 is for copy&paste to CLI."},
-				cli.IntFlag{Name: "timeout", Value: 60, Usage: "set `TIMEOUT` (in seconds) on authentication transaction. < 0 is infinite."},
-			},
-			Action: func(c *cli.Context) error {
-				config, err := loadConfig(c.GlobalString("config"))
-				if err != nil {
-					return err
-				}
-				setAuthVariables(config)
 
-				timeout := time.Duration(c.Int("timeout"))
-				if timeout > 0 {
-					go func() {
-						select {
-						case <-time.After(timeout * time.Second):
-							fmt.Fprintf(os.Stderr, "timed out\n")
-							os.Exit(1)
-						}
-					}()
-				}
-
-				// setup parameters
-
-				redirectURI := "urn:ietf:wg:oauth:2.0:oob"
-				port := c.Int("port")
-				var codeChan chan string
-				if port != 0 {
-					redirectURI = fmt.Sprintf("http://localhost:%d/", port)
-					codeChan = make(chan string)
-					go launchRedirectionServer(port, codeChan)
-				}
-
-				// request authorization (and authentication)
-
-				authURL := oauth2AuhBaseURL
-				form := url.Values{}
-				form.Add("client_id", apiClientID)
-				form.Add("redirect_uri", redirectURI)
-				form.Add("scope", oauth2Scope)
-				form.Add("response_type", "code")
-				browser.OpenURL(fmt.Sprintf("%s?%s", authURL, form.Encode()))
-
-				var authorizationCode string
-				if port == 0 {
-					fmt.Scanln(&authorizationCode)
-				} else {
-					authorizationCode = <-codeChan
-				}
-				//log.Printf("authorization_code=%s\n", authorization_code)
-
-				// request access token & request token
-
-				tokenURL := oauth2TokenBaseURL
-				form = url.Values{}
-				form.Add("client_id", apiClientID)
-				form.Add("client_secret", apiClientSecret)
-				form.Add("code", authorizationCode)
-				form.Add("redirect_uri", redirectURI)
-				form.Add("grant_type", "authorization_code")
-				resp, err := http.PostForm(tokenURL, form)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				/*
-					{
-						log.Printf("%s&%s", tokenURL, form.Encode())
-						b, _ := ioutil.ReadAll(resp.Body)
-						log.Printf("resp.Body=%s", b)
-					}
-				*/
-				dec := json.NewDecoder(resp.Body)
-				t := oAuth2AuthedTokens{}
-				err = dec.Decode(&t)
-				if err == io.EOF {
-					return fmt.Errorf("auth response from the server is empty")
-				} else if err != nil {
-					return err
-				}
-				config.AUTH.RefreshToken = t.RefreshToken
-
-				// get email address
-
-				infoURL := "https://www.googleapis.com/userinfo/email"
-				form = url.Values{}
-				form.Add("access_token", t.AccessToken)
-				form.Add("alt", "json")
-				//inforesp, err := http.PostForm(infoURL, form)
-				inforesp, err := http.Get(fmt.Sprintf("%s?%s", infoURL, form.Encode()))
-				if err != nil {
-					// save with User unchanged.
-					saveConfig(config, c.GlobalString("config"))
-					return fmt.Errorf("failed to get email address: %v", err)
-				}
-				defer inforesp.Body.Close()
-				/*
-					 {
-						log.Printf("%s&%s", infoURL, form.Encode())
-						b, _ := ioutil.ReadAll(inforesp.Body)
-						log.Printf("inforesp.Body=%s", b)
-					}
-				*/
-
-				dec = json.NewDecoder(inforesp.Body)
-				e := oAuth2Email{}
-				err = dec.Decode(&e)
-				if err == io.EOF {
-					return fmt.Errorf("auth response from the server is empty")
-				} else if err != nil {
-					return err
-				}
-				config.IMAP.User = e.Data.Email
-
-				saveConfig(config, c.GlobalString("config"))
-
-				return nil
-			},
-		},
-		{
-			Name:    "list",
-			Aliases: []string{"l", "ls"},
-			Usage:   "list messages",
-			Flags: []cli.Flag{
-				cli.StringFlag{Name: "criteria, c", Value: "SUBJECT", Usage: "criteria"},
-			},
-			Action: func(c *cli.Context) error {
-				configPath := c.GlobalString("config")
-				criteria := c.String("criteria")
-				return runList(configPath, criteria, strings.Join(c.Args(), " "))
-			},
-		},
-		{
-			Name:    "show",
-			Aliases: []string{"s"},
-			Usage:   "show messages",
-			Flags: []cli.Flag{
-				cli.BoolFlag{Name: "all", Usage: "show all messages"},
-				cli.StringFlag{Name: "seq", Usage: "show by seq. (comma separated or s1:s2"},
-				cli.StringFlag{Name: "subject, subj, s", Usage: "show by subject"},
-				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
-			},
-			Action: func(c *cli.Context) error {
-				configPath := c.GlobalString("config")
-				syncDirPath := c.GlobalString("dir")
-				header := c.Bool("header")
-				all := c.Bool("all")
-				seq := c.String("seq")
-				subject := c.String("subject")
-				return runShow(configPath, syncDirPath, header, all, seq, subject)
-			},
-		},
-		{
-			Name:    "get",
-			Aliases: []string{"g"},
-			Usage:   "get messages",
-			Flags: []cli.Flag{
-				cli.BoolFlag{Name: "all", Usage: "fetch all messages"},
-				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
-				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
-				cli.StringFlag{Name: "ext, e", Value: "txt", Usage: "file extention"},
-				cli.BoolFlag{Name: "header, H", Usage: "output mail headers"},
-			},
-			Action: func(c *cli.Context) error {
-				configPath := c.GlobalString("config")
-				syncDirPath := c.GlobalString("dir")
-				header := c.Bool("header")
-				all := c.Bool("all")
-				seq := c.String("seq")
-				subject := c.String("subject")
-				ext := c.String("ext")
-				return runGet(configPath, syncDirPath, header, all, seq, subject, ext)
-			},
-		},
-		{
-			Name:    "put",
-			Aliases: []string{"p"},
-			Usage:   "put messages",
-			Flags: []cli.Flag{
-				cli.StringFlag{Name: "name", Usage: "if from stdin, specify the name of it"},
-			},
-			Action: func(c *cli.Context) error {
-				configPath := c.GlobalString("config")
-				syncDirPath := c.GlobalString("dir")
-				stdinName := c.String("name")
-				return runPut(configPath, syncDirPath, c.Args(), stdinName)
-			},
-		},
-		{
-			Name:    "delete",
-			Aliases: []string{"del", "d"},
-			Usage:   "delete messages",
-			Flags: []cli.Flag{
-				cli.StringFlag{Name: "seq", Usage: "fetch by seq. (comma separated or s1:s2"},
-				cli.BoolFlag{Name: "all", Usage: "delete all messages"},
-				cli.StringFlag{Name: "subject, subj, s", Usage: "fetch by subject"},
-			},
-			Action: func(c *cli.Context) error {
-				configPath := c.GlobalString("config")
-				subject := c.String("subject")
-				all := c.Bool("all")
-				seq := c.String("seq")
-				return runDelete(configPath, all, subject, seq)
-			},
-		},
-	}
-	app.Run(os.Args)
 	return
 }
 
@@ -500,125 +301,6 @@ func putMessage(c *imapclient.Client, box, from, subject, ext string, file *os.F
 	}
 
 	return nil
-}
-
-func runList(configPath, criteria, keyword string) error {
-	config, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	setAuthVariables(config)
-
-	ic, err := initIMAP(config)
-	if err != nil {
-		return err
-	}
-
-	list, err := listMessages(ic, criteria, keyword)
-	if err != nil {
-		return fmt.Errorf("listing error: %v", err)
-	}
-	ic.Logout()
-
-	if len(list) == 0 {
-		fmt.Fprintf(os.Stderr, "no messages\n")
-	} else {
-		for _, e := range list {
-			fmt.Printf("%d %v (%v)\n", e.Seq, e.Subject, e.Date)
-		}
-	}
-
-	return nil
-}
-
-func runShow(configPath, syncDirPath string, header, all bool, seq, subject string) error {
-	config, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	setAuthVariables(config)
-
-	ic, err := initIMAP(config)
-	if err != nil {
-		return err
-	}
-
-	err = getMessages(ic, header, all, subject, seq, syncDirPath, "", stdoutWriter)
-	ic.Logout()
-
-	return err
-}
-
-func runGet(configPath, syncDirPath string, header, all bool, seq, subject, ext string) error {
-	config, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	setAuthVariables(config)
-
-	ic, err := initIMAP(config)
-	if err != nil {
-		return err
-	}
-
-	err = getMessages(ic, header, all, subject, seq, syncDirPath, ext, filesWriter)
-	ic.Logout()
-
-	return err
-}
-
-func runPut(configPath, syncDirPath string, patterns []string, stdinName string) error {
-	config, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	setAuthVariables(config)
-
-	ic, err := initIMAP(config)
-	if err != nil {
-		return err
-	}
-	ic.Logout() // re-connect in goroutine
-
-	disp := func(fn string, err error) {
-		if err == nil {
-			fmt.Fprintf(os.Stderr, "putting %v\n", fn)
-		} else {
-			fmt.Fprintf(os.Stderr, "failed to put file %v: %v\n", fn, err)
-		}
-	}
-
-	if len(stdinName) == 0 {
-		fmt.Fprintf(os.Stderr, "searching files in %v\n", syncDirPath)
-	} else {
-		fmt.Fprintf(os.Stderr, "searching files from stdin as %v\n", stdinName)
-	}
-
-	cnt, err := putMessages(config, syncDirPath, patterns, stdinName, disp)
-	if err != nil {
-		return err
-	}
-	if cnt == 0 {
-		fmt.Fprintf(os.Stderr, "no matches\n")
-	}
-
-	return nil
-}
-
-func runDelete(configPath string, all bool, subject, seq string) error {
-	config, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	setAuthVariables(config)
-
-	ic, err := initIMAP(config)
-	if err != nil {
-		return err
-	}
-
-	err = deleteMessage(ic, all, subject, seq)
-	return err
 }
 
 func deleteMessage(ic *imapclient.Client, all bool, subject, seq string) error {
