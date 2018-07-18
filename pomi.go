@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/shu/gli"
-	"bitbucket.org/shu/imapclient"
+	"bitbucket.org/shu_go/gli"
+	"bitbucket.org/shu_go/imapclient"
 	"github.com/BurntSushi/toml"
 )
 
@@ -110,7 +110,7 @@ func main() {
 	app.Usage = `1. pomi auth
 2. pomi get --all`
 
-	_, _, err := app.Run(os.Args)
+	err := app.Run(os.Args)
 	if err != nil {
 		os.Exit(1)
 	}
