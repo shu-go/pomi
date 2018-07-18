@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
-
-	"bitbucket.org/shu/log"
 )
 
 func TestPutAndListAndGet(t *testing.T) {
@@ -51,7 +49,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		t.Errorf("wrong put count %v", count)
 	}
 
-	log.Debug("=================")
+	//log.Debug("=================")
 
 	// overwrite
 	if err := ioutil.WriteFile("pomera_sync/"+testdata[1].Name, []byte(testdata[1].Data), 0x664); err != nil {
@@ -63,7 +61,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		t.Errorf("wrong put count %v", count)
 	}
 
-	log.Debug("=================")
+	//log.Debug("=================")
 
 	// substring name
 	if err := ioutil.WriteFile("pomera_sync/"+testdata[2].Name, []byte(testdata[2].Data), 0x664); err != nil {
@@ -75,7 +73,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		t.Errorf("wrong put count %v", count)
 	}
 
-	log.Debug("=================")
+	//log.Debug("=================")
 
 	// test1, test2, and te do not collide
 	if count, err := putMessages(config, "pomera_sync", []string{"*"}, "", nil); err != nil {
@@ -84,7 +82,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		t.Errorf("wrong put count %v", count)
 	}
 
-	log.Debug("=================")
+	//log.Debug("=================")
 
 	ic, _ = initIMAP(config)
 	if list, err := listMessages(ic, "", ""); err != nil {
@@ -106,7 +104,7 @@ func TestPutAndListAndGet(t *testing.T) {
 		}
 	}
 
-	log.Debug("=================")
+	//log.Debug("=================")
 
 	wipeoutLocalFiles(t, "pomera_sync")
 	if err := getMessages(ic, false, true, "", "", "pomera_sync", "txt", filesWriter); err != nil {

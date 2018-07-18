@@ -3,13 +3,12 @@
 package main
 
 import (
-	"bitbucket.org/shu/log"
 	"os"
 )
 
 func init() {
-	log.SetLevel(log.DebugLevel)
-	log.SetFlags(log.DefaultHeader | log.Shortfile)
+	//log.SetLevel(log.DebugLevel)
+	//log.SetFlags(log.DefaultHeader | log.Shortfile)
 
 	if dest := os.Getenv("POMI_LOG"); dest != "" {
 		flags := os.O_CREATE | os.O_APPEND
@@ -21,6 +20,6 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		log.SetOutput(f)
+		//log.SetOutput(f)
 	}
 }
