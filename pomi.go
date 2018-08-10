@@ -103,7 +103,7 @@ type globalCmd struct {
 }
 
 func main() {
-	app := gli.New(&globalCmd{})
+	app := gli.NewWith(&globalCmd{})
 	app.Name = "pomi"
 	app.Desc = "Pomera Sync IMAP tool"
 	app.Version = "0.1.3"
