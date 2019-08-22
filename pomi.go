@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"bitbucket.org/shu_go/gli"
-	"bitbucket.org/shu_go/imapclient"
 	"github.com/BurntSushi/toml"
+	"github.com/shu-go/gli"
+	"github.com/shu-go/imapclient"
 )
 
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}

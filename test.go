@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"bitbucket.org/shu_go/imapclient"
+	"github.com/shu-go/imapclient"
 )
 
 func getTestConfig() *config {
