@@ -22,6 +22,15 @@ import (
 	"github.com/shu-go/imapclient"
 )
 
+// Version is app version
+var Version string
+
+func init() {
+	if Version == "" {
+		Version = "dev-" + time.Now().Format("20060102")
+	}
+}
+
 var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 
 type config struct {
@@ -106,10 +115,11 @@ func main() {
 	app := gli.NewWith(&globalCmd{})
 	app.Name = "pomi"
 	app.Desc = "Pomera Sync IMAP tool"
-	app.Version = "0.1.3"
+	app.Version = Version
 	app.Usage = `1. pomi auth
-2. pomi get --all`
-
+2. pomi get --all
+`
+	app.Copyright = "(C) 2017 Shuhei Kubota"
 	err := app.Run(os.Args)
 	if err != nil {
 		os.Exit(1)
