@@ -12,6 +12,7 @@ github.com/shu-go/clise v0.0.0-20190822023516-79849fb81cfe/go.mod h1:VLiMEzXMBoz
 github.com/shu-go/gli v0.0.0-20200220142448-5ad1f294aff4 h1:N56D2tYrE+mB2Sku5lIiHQd3bk8ZIACFb0d5kMPdu/I=
 github.com/shu-go/gli v0.0.0-20200220142448-5ad1f294aff4/go.mod h1:bB0YEXDtEnnO3tpKiwGKr6FCeeJxm2uSc5He73IUCqI=
 github.com/shu-go/gotwant v0.0.0-20190822031422-724391433f13/go.mod h1:UxvcvxZEQUBw6lS9UgXOPh1outjvx2+bvDlEOpCTuGo=
+github.com/shu-go/gotwant v0.0.0-20190920074605-851c8677556b h1:HZZDo+sGck6gpa2lzY9rLVuatZwm6Q7qr59R3fZTeIk=
 github.com/shu-go/gotwant v0.0.0-20190920074605-851c8677556b/go.mod h1:FZepfqvib0mXjHiaQPTv0RUD5QMpMA/FHLfBQjZRRQg=
 github.com/shu-go/imapclient v0.0.0-20180718013840-8d2d1c170805 h1:Sw14eM9p+UhfvPfxkj+pxkF9Mh3/N2f8svhwtPq3js4=
 github.com/shu-go/imapclient v0.0.0-20180718013840-8d2d1c170805/go.mod h1:s4zCZhGVdBox6XJX3lyHlZenfiQzdAZBoZT476c83SA=
